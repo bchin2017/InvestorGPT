@@ -4,99 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>InvestorGPT Startup</title>
-  <!-- Loaded synchronously so window.STARTUP_STATUS is set before any JS runs -->
   <script src="startup_status.js"></script>
   <style>
-    :root {
-      --bg0: #0b132b;
-      --bg1: #1c2541;
-      --fg: #e6eef8;
-      --muted: #9fb3c8;
-      --accent: #3a86ff;
-      --card: rgba(11, 19, 43, 0.78);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      color: var(--fg);
-      background:
-        radial-gradient(circle at 15% 20%, #2a9d8f33 0%, transparent 35%),
-        radial-gradient(circle at 80% 15%, #3a86ff40 0%, transparent 30%),
-        linear-gradient(160deg, var(--bg0), var(--bg1));
-      display: grid;
-      place-items: center;
-      padding: 24px;
-    }
-    .card {
-      width: min(620px, 100%);
-      background: var(--card);
-      border: 1px solid #ffffff22;
-      border-radius: 16px;
-      padding: 28px;
-      box-shadow: 0 16px 48px #00000055;
-      backdrop-filter: blur(8px);
-    }
-    h1 { margin: 0 0 8px; font-size: 1.5rem; }
-    .sub { margin: 0 0 18px; color: var(--muted); font-size: 0.98rem; }
-    .status {
-      margin-top: 14px;
-      padding: 14px;
-      border-radius: 10px;
-      background: #0f2042;
-      border: 1px solid #ffffff1f;
-    }
-    .label {
-      font-size: 0.78rem;
-      color: #b9ccdf;
-      text-transform: uppercase;
-      letter-spacing: 1.4px;
-      margin-bottom: 6px;
-    }
-    .step { font-size: 1.05rem; margin: 0 0 6px; color: #fff; }
-    .msg  { margin: 0; color: #d2ddee; line-height: 1.5; }
-    .spinner {
-      width: 44px; height: 44px;
-      border-radius: 50%;
-      border: 4px solid #ffffff22;
-      border-top-color: var(--accent);
-      animation: spin 0.9s linear infinite;
-      margin-top: 18px;
-    }
-    .hint { margin: 16px 0 0; color: var(--muted); font-size: 0.9rem; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-  </style>
-</head>
-<body>
-  <main class="card">
-    <h1>InvestorGPT is starting</h1>
-    <p class="sub">The launcher is preparing data and AI services.</p>
-    <section class="status">
-      <div class="label">Current Step</div>
-      <p id="step" class="step">Waiting for launcher...</p>
-      <p id="msg"  class="msg">Run open_dashboard.bat to begin startup.</p>
-    </section>
-    <div class="spinner" aria-hidden="true"></div>
-    <p class="hint">This page redirects automatically when startup is complete.</p>
-  </main>
-
-  <script>
-    const s = window.STARTUP_STATUS || {};
-    document.getElementById("step").textContent = s.step    || "Waiting for launcher...";
-    document.getElementById("msg").textContent  = s.message || "Run open_dashboard.bat to begin startup.";
-
-    if (s.ready) {
-      // Redirect immediately; slight pause so user can read "Ready" message
-      setTimeout(function () { window.location.href = "index.html"; }, 700);
-    } else {
-      // Reload the whole page so the <script src> above fetches fresh status from disk
-      setTimeout(function () { window.location.reload(); }, 1500);
-    }
-  </script>
-</body>
-</html>
-
     :root {
       --bg0: #0b132b;
       --bg1: #1c2541;
@@ -222,7 +131,7 @@
       if (status.step) stepEl.textContent = status.step;
       if (status.message) msgEl.textContent = status.message;
 
-      if (status.ready === true && !redirected) {
+      if (status.ready && !redirected) {
         redirected = true;
         msgEl.textContent = "Startup complete. Redirecting to dashboard...";
         setTimeout(() => {

@@ -97,6 +97,71 @@
 - [ ] P/E, P/S, EV/EBITDA valuation ratios
 - [ ] Export report (PDF)
 
+### Phase 5 — Data Retention & Crawling Strategy (Planned)
+
+**Objective:** Optimize Firecrawl ingestion, FAISS indexing, retrieval quality, storage usage, and response performance.
+
+#### Data Time Horizons
+
+| Source | Horizon | Reason |
+|---|---|---|
+| Stock Price CSV (INTC 1980→, MU 1984→) | Full history | 11-12k rows, trivial for Pandas. Used for price lookup, returns, CAGR, volatility, drawdown. |
+| SEC 10-K Filings | Latest 4-5 years (FY2022–FY2025+) | Investor focus on recent strategy, risks, AI, manufacturing. |
+| Macrotrends Financials (Rev, EPS, NI, CF, BS) | Last 10 years | Long-term trend analysis without excessive volume. |
+| StockAnalysis Financials (Annual + Quarterly) | Last 10 years | Trend and comparison analysis. |
+| CompaniesMarketCap (Market cap, rankings) | Last 10 years | Long-term valuation context. |
+| Investor Relations (Presentations, earnings, PR) | Latest 2 years | Older IR content adds retrieval noise. |
+
+#### FAISS Best Practices
+
+**Include in FAISS:**
+- SEC 10-K filings, earnings materials, investor presentations
+- Strategy documents, risk factors, financial summaries
+- AI roadmap, foundry strategy, HBM market discussions
+
+**Do NOT include in FAISS:**
+- Daily stock prices, OHLCV records, large CSV datasets, raw time-series
+
+**Target FAISS size:** 1,000–2,000 chunks (current: ~754)
+
+#### Query Routing Improvements
+
+| Query Type | Route | Examples |
+|---|---|---|
+| Stock price | CSV only | "Intel closing price 2025-01-06", "52-week high" |
+| Business | FAISS only | "Intel AI strategy", "Micron risk factors" |
+| Mixed | CSV + FAISS | "Stock after AI announcement", "HBM impact on price" |
+
+#### Metadata per Chunk
+
+```json
+{
+  "source": "SEC 10-K",
+  "company": "Intel",
+  "ticker": "INTC",
+  "year": 2024,
+  "section": "Risk Factors",
+  "page": 42,
+  "url": "...",
+  "doc_type": "10-K"
+}
+```
+
+#### Known Gaps
+- [ ] 10-year stock price history missing from RAG context (CSV exists but not surfaced in all queries)
+- [ ] SEC 10-Q filings not yet indexed
+- [ ] SEC 8-K filings not yet indexed
+- [ ] Earnings call transcripts not yet crawled
+- [ ] Insider trading (Form 4) not tracked
+- [ ] Dividend history not tracked
+
+#### Future Enhancements
+- [ ] Knowledge graph for entity relationships
+- [ ] Financial analytics engine (structured queries)
+- [ ] Bull/Bear case generation from retrieved evidence
+- [ ] Automated investment thesis generation
+- [ ] Hybrid architecture: CSV/SQL for numerical data + FAISS for documents + GPT-4o synthesis with citations
+
 ---
 
 ## Architecture — Current

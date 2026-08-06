@@ -390,7 +390,8 @@ def compute_buffett_scores(df, ticker: str):
 
 def generate_ai_response(user_question, ticker, scores, buffett_score,
                           current_price, ensemble_base, ensemble_bull, ensemble_bear,
-                          intrinsic_value):
+                          intrinsic_value, signal_score=50.0, action='Hold',
+                          action_desc='', factors=None):
     """Generate Buffett-style AI response via OpenAI (or rule-based fallback)."""
     fund = FUNDAMENTALS[ticker]
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -400,16 +401,34 @@ def generate_ai_response(user_question, ticker, scores, buffett_score,
     roe_latest = list(fund['roe_pct'].values())[-1]
     de_latest = list(fund['debt_to_equity'].values())[-1]
 
+    # Build signal factor summary for LLM context
+    factor_summary = ''
+    if factors:
+        factor_summary = (f"RSI={factors['rsi']:.0f}, BB%={factors['bb']:.0f}, "
+                          f"Z-Score={factors['zscore']:.0f}, 52W-Pos={factors['pos52']:.0f}, "
+                          f"MA200-Dev={factors['ma200']:.0f}, MACD={factors['macd']:.0f}, "
+                          f"Golden-Cross={'Yes' if factors.get('golden_cross') else 'No'}")
+
     system_prompt = f"""You are Warren Buffett. Answer the user's question about {TICKER_NAMES[ticker]} ({ticker}).
 Use folksy, wisdom-filled style. Cite real numbers below. Keep response under 400 words.
-End with a clear actionable insight. Note: educational only, not financial advice.
+End with a clear actionable recommendation matching the DECISION MATRIX output.
+Note: educational only, not financial advice.
 
 DATA:
 - Price: ${current_price:.2f} | Intrinsic Value: ${intrinsic_value:.2f}
-- Buffett Score: {buffett_score:.0f}/100 | EPS (latest): ${eps_latest:.2f}
-- Revenue (latest): ${rev_latest:.1f}B | ROE: {roe_latest:.1f}% | D/E: {de_latest:.2f}
+- Buffett Score: {buffett_score:.0f}/100 (Quality) | Signal Score: {signal_score:.0f}/100 (Timing, 0=buy 100=sell)
+- EPS (latest): ${eps_latest:.2f} | Revenue: ${rev_latest:.1f}B | ROE: {roe_latest:.1f}% | D/E: {de_latest:.2f}
 - Forecast (18mo): Bear ${ensemble_bear:.2f} / Base ${ensemble_base:.2f} / Bull ${ensemble_bull:.2f}
-- Narrative: {fund['narrative']}"""
+- Technical Factors: {factor_summary}
+- Narrative: {fund['narrative']}
+
+DECISION MATRIX OUTPUT:
+- Action: {action}
+- Rationale: {action_desc}
+
+The Decision Matrix combines Quality (Buffett Score) and Timing (Signal Score).
+Actions range from BUY MAX (best quality + cheapest entry) to SELL ALL (poor quality + overbought).
+Always state the matrix action clearly and explain why, referencing both quality and timing scores."""
 
     if api_key:
         try:
@@ -433,6 +452,16 @@ DATA:
     quality_label = ("excellent" if buffett_score >= 70 else
                      "good" if buffett_score >= 55 else
                      "average" if buffett_score >= 40 else "below average")
+    timing_label = ("deeply oversold" if signal_score <= 30 else
+                    "undervalued" if signal_score <= 50 else
+                    "fairly valued" if signal_score <= 65 else
+                    "overheated" if signal_score <= 80 else "overbought")
+
+    # Decision matrix banner included in all responses
+    matrix_banner = (f'\n\n📊 **Decision Matrix → {action}**\n'
+                     f'> Quality: {buffett_score:.0f}/100 ({quality_label}) · '
+                     f'Timing: {signal_score:.0f}/100 ({timing_label})\n'
+                     f'> *{action_desc}*')
 
     if any(w in q for w in ['buy', 'invest', 'entry', 'accumulate', 'dca', 'worth']):
         verb = "accumulate" if buffett_score > 60 else ("be cautious about" if buffett_score > 40 else "avoid")
@@ -440,21 +469,27 @@ DATA:
                 f'{TICKER_NAMES[ticker]} at **${current_price:.2f}**:\n'
                 f'- Intrinsic Value (DCF): **${intrinsic_value:.2f}**\n'
                 f'- Buffett Score: **{buffett_score:.0f}/100** ({quality_label})\n'
-                f'- Base Forecast (18mo): **${ensemble_base:.2f}** ({upside:+.1f}% implied)\n\n'
+                f'- Signal Score: **{signal_score:.0f}/100** ({timing_label})\n'
+                f'- Base Forecast (18mo): **${ensemble_base:.2f}** ({upside:+.1f}% implied)\n'
+                f'{matrix_banner}\n\n'
                 f'I would **{verb}** at this price. {fund["narrative"]}\n\n'
                 f'⚠️ *Educational only — not financial advice.*')
 
     if any(w in q for w in ['sell', 'exit', 'reduce', 'trim']):
         return (f'*"Only when the tide goes out do you discover who\'s been swimming naked."*\n\n'
                 f'At **${current_price:.2f}**, Buffett Score is **{buffett_score:.0f}/100**.\n'
-                f'Bear / Base / Bull: **${ensemble_bear:.2f} / ${ensemble_base:.2f} / ${ensemble_bull:.2f}**\n\n'
+                f'Signal Score: **{signal_score:.0f}/100** ({timing_label}).\n'
+                f'Bear / Base / Bull: **${ensemble_bear:.2f} / ${ensemble_base:.2f} / ${ensemble_bull:.2f}**\n'
+                f'{matrix_banner}\n\n'
                 f'{"Consider partial profit-taking if this is an oversized position." if upside < 10 else "Hold unless your position size is uncomfortably large."}\n\n'
                 f'⚠️ *Educational only — not financial advice.*')
 
     return (f'*"Rule No.1: Never lose money. Rule No.2: Never forget Rule No.1."*\n\n'
             f'**{TICKER_NAMES[ticker]} ({ticker})** — ${current_price:.2f}\n'
             f'- Intrinsic Value: **${intrinsic_value:.2f}** | Buffett Score: **{buffett_score:.0f}/100**\n'
-            f'- Forecast: Bear **${ensemble_bear:.2f}** / Base **${ensemble_base:.2f}** / Bull **${ensemble_bull:.2f}**\n\n'
+            f'- Signal Score: **{signal_score:.0f}/100** ({timing_label})\n'
+            f'- Forecast: Bear **${ensemble_bear:.2f}** / Base **${ensemble_base:.2f}** / Bull **${ensemble_bull:.2f}**\n'
+            f'{matrix_banner}\n\n'
             f'{fund["narrative"]}\n\n'
             f'⚠️ *Educational only — not financial advice.*')
 
@@ -601,6 +636,65 @@ def main():
         with c_dm2:
             st.info("**Economic Moat:** " + " · ".join(f"{k}: {v}/10" for k, v in fund['moat'].items()))
             st.info(f"**Narrative:** {fund['narrative']}")
+
+        # Full 5x5 Decision Matrix table with colored cells
+        st.markdown("#### Decision Matrix Detail")
+        _q_zones = [('≥75 Excellent', 'excellent'), ('≥60 Good', 'good'),
+                    ('≥45 Average', 'average'), ('≥30 Weak', 'weak'), ('<30 Poor', 'poor')]
+        _t_zones = [('≤30 Strong Buy', 'strong_buy'), ('≤50 Buy', 'buy'),
+                    ('≤65 Neutral', 'neutral'), ('≤80 Caution', 'caution'), ('>80 Sell', 'sell')]
+        _dm_lookup = {
+            ('excellent','strong_buy'):'BUY MAX',('excellent','buy'):'BUY, DCA',
+            ('excellent','neutral'):'Hold',('excellent','caution'):'Hold',
+            ('excellent','sell'):'Take Profit',
+            ('good','strong_buy'):'BUY',('good','buy'):'BUY, DCA',
+            ('good','neutral'):'Hold',('good','caution'):'Hold',
+            ('good','sell'):'Reduce',
+            ('average','strong_buy'):'Buy Small',('average','buy'):'Hold',
+            ('average','neutral'):'Hold',('average','caution'):'Hold',
+            ('average','sell'):'Reduce',
+            ('weak','strong_buy'):'Do Not Buy',('weak','buy'):'Do Not Buy',
+            ('weak','neutral'):'Sell Partially',('weak','caution'):'Sell',
+            ('weak','sell'):'Sell',
+            ('poor','strong_buy'):'Do Not Buy',('poor','buy'):'Do Not Buy',
+            ('poor','neutral'):'Sell',('poor','caution'):'Sell',
+            ('poor','sell'):'Sell All',
+        }
+        def _cell_color(act):
+            if act in ('BUY MAX','BUY','BUY, DCA','Buy Small'):
+                return '#00cc6633', '#00cc66'
+            if act in ('Sell','Sell All','Do Not Buy','Sell Partially'):
+                return '#ff444433', '#ff4444'
+            if act in ('Take Profit','Reduce'):
+                return '#ff880033', '#ff8800'
+            return '#aaaaaa22', '#888888'
+
+        # Determine which cell is the current position
+        _cur_q = ('excellent' if buffett_score >= 75 else 'good' if buffett_score >= 60 else
+                  'average' if buffett_score >= 45 else 'weak' if buffett_score >= 30 else 'poor')
+        _cur_t = ('strong_buy' if signal_score <= 30 else 'buy' if signal_score <= 50 else
+                  'neutral' if signal_score <= 65 else 'caution' if signal_score <= 80 else 'sell')
+
+        _html = '<table style="width:100%;border-collapse:collapse;font-size:13px;text-align:center;">'
+        _html += '<tr><th style="border:1px solid #444;padding:6px;background:#222;color:#fff;">Buffett Score ↓ \\ Signal →</th>'
+        for t_lbl, _ in _t_zones:
+            _html += f'<th style="border:1px solid #444;padding:6px;background:#222;color:#fff;">{t_lbl}</th>'
+        _html += '</tr>'
+        for q_lbl, q_key in _q_zones:
+            _html += f'<tr><th style="border:1px solid #444;padding:6px;background:#333;color:#fff;text-align:left;">{q_lbl}</th>'
+            for _, t_key in _t_zones:
+                act_txt = _dm_lookup[(q_key, t_key)]
+                bg, fg = _cell_color(act_txt)
+                is_current = (q_key == _cur_q and t_key == _cur_t)
+                border = f'3px solid {fg}' if is_current else '1px solid #444'
+                marker = ' ⬅️' if is_current else ''
+                _html += (f'<td style="border:{border};padding:8px;background:{bg};'
+                          f'color:{fg};font-weight:{"bold" if is_current else "normal"};">'
+                          f'{act_txt}{marker}</td>')
+            _html += '</tr>'
+        _html += '</table>'
+        st.markdown(_html, unsafe_allow_html=True)
+        st.caption(f"Current position: Buffett {buffett_score:.0f} ({_cur_q}) · Signal {signal_score:.0f} ({_cur_t}) → **{action}**")
 
     # ── Tab 3: Fundamentals ───────────────────────────────────
     with tabs[2]:
@@ -764,6 +858,8 @@ def main():
                     user_q, ticker, scores, buffett_score, current_price,
                     fc_ai['ensemble_base'], fc_ai['ensemble_bull'],
                     fc_ai['ensemble_bear'], intrinsic_value,
+                    signal_score=signal_score, action=action,
+                    action_desc=action_desc, factors=factors,
                 )
             st.markdown(resp)
             if not os.getenv("OPENAI_API_KEY"):
