@@ -1,4 +1,27 @@
-# SemiconInvest AI (InvestorGPT)
+# InvestorGPT — Documentation Index
+
+## Quick Navigation
+
+| Document | Purpose |
+|---|---|
+| [HOW_TO_RUN.md](HOW_TO_RUN.md) | Start/stop dashboard, refresh data, first-time setup |
+| [SIGNAL_LOGIC.md](SIGNAL_LOGIC.md) | Buffett scoring, 10-factor signal, decision matrix formulas |
+| [CONTEXT_RESTORE.md](CONTEXT_RESTORE.md) | Full project recovery reference (canonical layout + architecture) |
+| [CHANGELOG.md](CHANGELOG.md) | History of significant changes |
+| [progress.md](progress.md) | Feature completion status and roadmap |
+
+## Quick Start
+
+```powershell
+cd "c:\Users\bhoe\VS Code\InvestorGPT"
+start_investor.bat
+```
+
+Open: `http://localhost:8502`
+
+---
+
+# SemiconInvest AI — Project Specification
 
 ## Project Name
 

@@ -1,0 +1,66 @@
+name: Daily Market Data Refresh
+
+on:
+  schedule:
+    # 03:10 UTC = 11:10 MYT (UTC+8), weekdays only
+    - cron: "10 3 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-market-data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh-market-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install minimal dependencies
+        run: pip install pandas requests
+
+      - name: Refresh INTC and MU history from Yahoo Finance
+        run: python scripts/refresh_data.py --force --tickers INTC MU
+
+      - name: Show refresh summary
+        run: |
+          python - <<'PY'
+          import json, os
+          meta_path = ".cache/market_data_meta.json"
+          if os.path.exists(meta_path):
+              with open(meta_path, encoding="utf-8") as f:
+                  meta = json.load(f)
+              for ticker, info in meta.items():
+                  print(f"{ticker}: rows={info.get('rows')}, "
+                        f"range={info.get('start_date')} → {info.get('end_date')}, "
+                        f"last_close=${info.get('last_close', 0):.2f}, "
+                        f"fetched_on={info.get('fetched_on')}")
+          else:
+              print("meta missing:", meta_path)
+          PY
+
+      - name: Commit refreshed market data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/stock_history/ .cache/market_data_meta.json
+          if git diff --cached --quiet; then
+            echo "No market data changes to commit."
+          else
+            git commit -m "daily market data refresh (INTC, MU)"
+            git push
+          fi

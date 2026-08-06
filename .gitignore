@@ -1,5 +1,35 @@
-.env
+# Python cache
 __pycache__/
 *.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime logs
+*.log
+refresh_startup.log
+
+# Environment
+.env
+.env.*
+
+# Firecrawl cache
 .firecrawl/
-data/
+
+# Large SEC 10-K filings — re-downloadable via scripts/download_10k.py
+data/10k/
+
+# Cache: keep tracked metadata used by GitHub Actions
+.cache/*
+!.cache/
+!.cache/market_data_meta.json
