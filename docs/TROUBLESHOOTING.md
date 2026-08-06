@@ -45,6 +45,26 @@ python scripts\rag_server.py
 | `open_dashboard_fast.bat` | fast | Skip refresh/generate → open existing snapshot |
 | `start_investor.bat` | streamlit | Start Streamlit `dashboard.py` on port 8502 |
 
+## Decision Matrix Table
+
+### Edits to index.html get overwritten
+- `scripts/generate_dashboard.py` regenerates `webpage/index.html` on every `open_dashboard.bat` full run
+- **All UI changes (including decision matrix) must go in `scripts/generate_dashboard.py`**, not `webpage/index.html`
+- HTML template: search for `tab-buffett` in `generate_dashboard.py`
+- JS rendering: search for `renderBuffettTab` in `generate_dashboard.py`
+
+### Decision matrix is in `renderBuffettTab()`
+- Layout: 3 equal `col-lg-4` columns — Scorecard | Radar | Decision Analysis
+- Top half of Decision Analysis card: large action text (e.g. "Hold") with colored background
+- Bottom half: 5×5 matrix table with colored cells + emoji icons
+- Current position marked with ◀ and bold border
+
+### Unicode / emoji in generate_dashboard.py
+- Python `HTML_TEMPLATE` is a triple-quoted string — backslash-u escapes like `\u00b7` get interpreted by Python, not JS
+- Use actual Unicode characters (✅ 🟢 ⚪ 🟠 🔴 · ≥ ≤ ◀) directly in the template
+- Surrogate pairs (`\ud83d\udfe2`) cause `UnicodeEncodeError` — never use them
+- `\u{1F7E2}` syntax fails in Python strings — not supported
+
 ## Port Assignments
 - **8502** — Streamlit dashboard (`dashboard.py`)
 - **8503** — RAG Flask server (`scripts/rag_server.py`)
