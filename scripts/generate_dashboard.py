@@ -390,18 +390,20 @@ body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
   <!-- buffett tab -->
   <div id="tab-buffett" style="display:none">
     <div class="row g-3">
-      <div class="col-lg-5">
+      <div class="col-lg-4">
         <div class="card p-3">
-          <h6 class="fw-semibold">Buffett Scorecard</h6>
-          <table class="table table-sm table-hover mt-2" id="buffettTable"></table>
+          <h6 class="fw-semibold mb-2">Scorecard</h6>
+          <table class="table table-sm mb-0" style="font-size:12px;" id="buffettTable"></table>
         </div>
       </div>
       <div class="col-lg-4">
-        <div class="card p-3 h-100"><h6 class="fw-semibold">Score Radar</h6>
-          <canvas id="radarChart"></canvas></div>
+        <div class="card p-3 h-100">
+          <h6 class="fw-semibold mb-2">Radar</h6>
+          <canvas id="radarChart"></canvas>
+        </div>
       </div>
-      <div class="col-lg-3">
-        <div class="card p-3 h-100" id="decisionBox"></div>
+      <div class="col-lg-4">
+        <div class="card p-3 h-100" id="decisionMatrixCard"></div>
       </div>
     </div>
   </div>
@@ -609,28 +611,78 @@ function renderBuffettTab(d){
   const rows = Object.entries(d.scores).map(([k,v])=>{
     const wt = W[k]||0; const contrib = (v*wt*10/100).toFixed(1);
     const bg = v>=8?'#198754':v>=6?'#ffc107':v>=4?'#fd7e14':'#dc3545';
-    return `<tr><td>${k}</td><td><span class="badge" style="background:${bg}">${v}/10</span></td>
-            <td class="text-muted small">${wt}%</td><td class="text-end">${contrib}</td></tr>`;
+    return `<tr><td style="padding:2px 4px;">${k}</td><td><span class="badge" style="background:${bg};font-size:10px;">${v}</span></td>
+            <td class="text-muted" style="font-size:10px;">${wt}%</td><td class="text-end" style="font-size:10px;">${contrib}</td></tr>`;
   }).join('');
-  tbl.innerHTML = `<thead class="table-light"><tr><th>Principle</th><th>Score</th><th>Wt</th><th>Contrib</th></tr></thead>
+  tbl.innerHTML = `<thead><tr style="font-size:10px;color:#888;"><th>Principle</th><th>Score</th><th>Wt</th><th>Pts</th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr class="fw-bold"><td colspan="3">Total Buffett Score</td><td class="text-end">${d.buffett_score.toFixed(1)}</td></tr></tfoot>`;
+    <tfoot><tr class="fw-bold" style="font-size:11px;border-top:2px solid #ddd;"><td colspan="3">Total</td><td class="text-end">${d.buffett_score.toFixed(1)}</td></tr></tfoot>`;
 
   const labels = Object.keys(d.scores);
   const vals   = Object.values(d.scores);
   mkChart('radarChart',{type:'radar',data:{labels,datasets:[{label:d.ticker,data:vals,
-    borderColor:d.color,backgroundColor:d.color+'33',pointBackgroundColor:d.color}]},
-    options:{scales:{r:{min:0,max:10,ticks:{stepSize:2}}},plugins:{legend:{display:false}}}});
+    borderColor:d.color,backgroundColor:d.color+'33',pointBackgroundColor:d.color,pointRadius:2}]},
+    options:{responsive:true,maintainAspectRatio:true,scales:{r:{min:0,max:10,ticks:{stepSize:2,font:{size:9}},pointLabels:{font:{size:9}}}},plugins:{legend:{display:false}}}});
 
-  const db = document.getElementById('decisionBox');
-  db.innerHTML = `<div class="action-box h-100 d-flex flex-column justify-content-center align-items-center text-center"
-      style="background:${d.action_color}">
-    <div style="font-size:1.6rem;font-weight:800">${d.action}</div>
-    <div class="mt-1">${d.action_desc}</div>
-    <hr style="border-color:rgba(255,255,255,.4);width:80%"/>
-    <div class="small">Buffett: <b>${d.buffett_score.toFixed(1)}</b> (${buffLabel(d.buffett_score)})</div>
-    <div class="small">Signal: <b>${d.signal_score.toFixed(1)}</b> (${sigLabel(d.signal_score)})</div>
-    <div class="small mt-1">IV: ${dollar(d.intrinsic_value)}</div>
+  // 5x5 Decision Matrix
+  const qZones = [['≥75 Excellent','excellent'],['≥60 Good','good'],['≥45 Average','average'],['≥30 Weak','weak'],['<30 Poor','poor']];
+  const tZones = [['≤30 Strong Buy','strong_buy'],['≤50 Buy','buy'],['≤65 Neutral','neutral'],['≤80 Caution','caution'],['>80 Sell','sell']];
+  const dmLookup = {
+    'excellent_strong_buy':'BUY MAX','excellent_buy':'BUY, DCA','excellent_neutral':'Hold','excellent_caution':'Hold','excellent_sell':'Take Profit',
+    'good_strong_buy':'BUY','good_buy':'BUY, DCA','good_neutral':'Hold','good_caution':'Hold','good_sell':'Reduce',
+    'average_strong_buy':'Buy Small','average_buy':'Hold','average_neutral':'Hold','average_caution':'Hold','average_sell':'Reduce',
+    'weak_strong_buy':'Do Not Buy','weak_buy':'Do Not Buy','weak_neutral':'Sell Partially','weak_caution':'Sell','weak_sell':'Sell',
+    'poor_strong_buy':'Do Not Buy','poor_buy':'Do Not Buy','poor_neutral':'Sell','poor_caution':'Sell','poor_sell':'Sell All'
+  };
+  function cellIcon(act){
+    if(act==='BUY MAX') return '✅';
+    if(['BUY','BUY, DCA','Buy Small'].includes(act)) return '🟢';
+    if(act==='Hold') return '⚪';
+    if(['Take Profit','Reduce'].includes(act)) return '🟠';
+    return '🔴';
+  }
+  function cellStyle(act, isCur){
+    let bg,fg;
+    if(['BUY MAX','BUY','BUY, DCA','Buy Small'].includes(act)){bg='#d4edda';fg='#155724';}
+    else if(['Sell','Sell All','Do Not Buy','Sell Partially'].includes(act)){bg='#f8d7da';fg='#721c24';}
+    else if(['Take Profit','Reduce'].includes(act)){bg='#fff3cd';fg='#856404';}
+    else{bg='#f5f5f5';fg='#555';}
+    const brd = isCur ? `2px solid ${fg}` : '1px solid #ccc';
+    const fw = isCur ? '700' : '500';
+    return `border:${brd};padding:2px 4px;background:${bg};color:${fg};font-weight:${fw};font-size:10px;text-align:center;line-height:1.3;white-space:nowrap;`;
+  }
+  const tHdrColors = ['#155724','#2d6a3f','#555','#856404','#721c24'];
+  const qHdrColors = ['#155724','#2d6a3f','#555','#856404','#721c24'];
+  const curQ = d.buffett_score>=75?'excellent':d.buffett_score>=60?'good':d.buffett_score>=45?'average':d.buffett_score>=30?'weak':'poor';
+  const curT = d.signal_score<=30?'strong_buy':d.signal_score<=50?'buy':d.signal_score<=65?'neutral':d.signal_score<=80?'caution':'sell';
+
+  let mHtml = '<div style="display:inline-block;"><table style="border-collapse:collapse;">';
+  mHtml += '<tr><th style="border:1px solid #ccc;padding:3px 5px;background:#eef;color:#333;font-size:10px;font-weight:700;">Score\\Signal</th>';
+  tZones.forEach(([lbl],i)=>{mHtml+=`<th style="border:1px solid #ccc;padding:2px 4px;background:#eef;color:${tHdrColors[i]};font-size:10px;font-weight:700;text-align:center;">${lbl}</th>`;});
+  mHtml += '</tr>';
+  qZones.forEach(([qLbl,qKey],qi)=>{
+    mHtml += `<tr><th style="border:1px solid #ccc;padding:2px 5px;background:#eef;color:${qHdrColors[qi]};font-size:10px;font-weight:700;white-space:nowrap;">${qLbl}</th>`;
+    tZones.forEach(([,tKey])=>{
+      const act = dmLookup[qKey+'_'+tKey];
+      const isCur = (qKey===curQ && tKey===curT);
+      const icon = cellIcon(act);
+      mHtml += `<td style="${cellStyle(act,isCur)}">${icon} ${act}${isCur?' ◀':''}</td>`;
+    });
+    mHtml += '</tr>';
+  });
+  mHtml += '</table></div>';
+
+  const matrixDiv = document.getElementById('decisionMatrixCard');
+  matrixDiv.innerHTML = `<div style="display:flex;flex-direction:column;height:100%;">
+    <h6 class="fw-semibold mb-2">Decision Analysis</h6>
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;background:${d.action_color}18;border-radius:8px;padding:12px;margin-bottom:8px;">
+      <div style="font-size:2rem;font-weight:900;color:${d.action_color};letter-spacing:1px;">${d.action}</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">${d.action_desc}</div>
+      <div style="font-size:11px;color:#777;margin-top:6px;">
+        Buffett <b>${d.buffett_score.toFixed(1)}</b> · Signal <b>${d.signal_score.toFixed(1)}</b> · IV <b>${dollar(d.intrinsic_value)}</b>
+      </div>
+    </div>
+    <div style="text-align:center;">${mHtml}</div>
   </div>`;
 }
 
