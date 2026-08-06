@@ -1,14 +1,24 @@
-# InvestorGPT — Documentation Index
+# SemiconInvest AI — Documentation Index
 
-## Quick Navigation
+## Documents
 
+### 1. Getting Started
 | Document | Purpose |
 |---|---|
-| [HOW_TO_RUN.md](HOW_TO_RUN.md) | Start/stop dashboard, refresh data, first-time setup |
-| [SIGNAL_LOGIC.md](SIGNAL_LOGIC.md) | Buffett scoring, 10-factor signal, decision matrix formulas |
-| [CONTEXT_RESTORE.md](CONTEXT_RESTORE.md) | Full project recovery reference (canonical layout + architecture) |
+| [HOW_TO_RUN.md](HOW_TO_RUN.md) | First-time setup, start/stop dashboard, RAG pipeline commands |
+
+### 2. Architecture & Reference
+| Document | Purpose |
+|---|---|
+| [CONTEXT_RESTORE.md](CONTEXT_RESTORE.md) | Canonical folder layout, startup architecture, port map |
+| [SIGNAL_LOGIC.md](SIGNAL_LOGIC.md) | Buffett scorecard, 10-factor signal, decision matrix formulas |
+| [tool-use.md](tool-use.md) | Tool registry — API, embeddings, vector store, RAG status |
+
+### 3. Project History
+| Document | Purpose |
+|---|---|
+| [progress.md](progress.md) | Phase completion status and roadmap |
 | [CHANGELOG.md](CHANGELOG.md) | History of significant changes |
-| [progress.md](progress.md) | Feature completion status and roadmap |
 
 ## Quick Start
 

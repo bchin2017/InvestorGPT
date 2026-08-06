@@ -1,42 +1,44 @@
-# InvestorGPT – Tool Use Registry
+# InvestorGPT — Tool Use Registry
 
-| Tool | Covered? | Notes |
+| Tool | Status | Implementation |
 |---|---|---|
-| API calls | ✅ Partial | SEC EDGAR API (`download_10k.py`), Yahoo Finance API (`yfinance`) |
-| Calculator / math | ❌ No | No ratio calculations (P/E, gross margin %) yet |
-| Database query | ❌ No | No SQL/vector DB query yet — FAISS planned but not built |
-| Web scraping | ✅ Partial | Firecrawl practice done (`practice.py`); not yet wired into main pipeline |
-| Document parsing | ✅ Partial | Raw HTML regex extraction in `generate_dashboard.py`; Firecrawl `/parse` planned |
-| Text chunking | ❌ No | Planned via LangChain or LlamaIndex |
-| Embeddings | ❌ No | Planned — Azure OpenAI `text-embedding-3-large` |
-| Vector store | ❌ No | Planned — FAISS (`faiss-cpu`) |
-| LLM / RAG query | ❌ No | Planned — Azure OpenAI GPT-4o |
-| Chat UI | ❌ No | Planned — Streamlit |
+| API calls | ✅ Done | SEC EDGAR (`download_10k.py`), Yahoo Finance (`refresh_data.py`) |
+| Web scraping | ✅ Done | Firecrawl — `crawl_sources.py` (21 URLs, 6 source types) |
+| Document parsing | ✅ Done | BeautifulSoup HTML→text in `build_index.py` |
+| Text chunking | ✅ Done | 500–800 token chunks with overlap in `build_index.py` |
+| Embeddings | ✅ Done | `text-embedding-3-large` (3072-dim) via OpenAI |
+| Vector store | ✅ Done | FAISS (`faiss-cpu`) — `data/rag_index/` |
+| LLM / RAG query | ✅ Done | GPT-4o via `rag_chatbot.py` with citation-backed answers |
+| Chat UI | ⭐ Planned | Streamlit tab — Phase 3 remaining |
+| Calculator / math | ✅ Done | Financial ratios, signal scores in `dashboard.py` |
+| Database query | ❌ No | No SQL — FAISS covers vector search needs |
 
 ---
 
-## Data Pipeline — Tool Mapping
+## Data Pipeline
 
 ```
-SEC EDGAR API
-    → download_10k.py
-        → data/10k/*.html (raw)
-            → Firecrawl /parse  (planned)
-                → data/markdown/*.md (clean)
-                    → LangChain chunking
-                        → text-embedding-3-large
-                            → FAISS index
-                                → GPT-4o (RAG)
-                                    → Streamlit chat UI
+Firecrawl (crawl_sources.py)
+    → data/crawled/*.md + *.meta.json
+        ↓
+SEC EDGAR (download_10k.py)
+    → data/10k/*.html
+        ↓
+build_index.py
+    → BeautifulSoup parse → chunk (500–800 tokens)
+    → text-embedding-3-large
+    → FAISS index (data/rag_index/)
+        ↓
+rag_chatbot.py
+    → top-k retrieval + metadata filter
+    → GPT-4o → citation-backed answer
 ```
 
 ---
 
 ## Environment Variables
 
-| Variable | Tool | Where set |
+| Variable | Tool | Status |
 |---|---|---|
-| `FIRECRAWL_API_KEY` | Firecrawl | `.env` + PowerShell profile |
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI | `.env` (planned) |
-| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI | `.env` (planned) |
-| `AZURE_OPENAI_DEPLOYMENT` | GPT-4o deployment name | `.env` (planned) |
+| `OPENAI_API_KEY` | GPT-4o + text-embedding-3-large | Required |
+| `FIRECRAWL_API_KEY` | `crawl_sources.py` | Required |

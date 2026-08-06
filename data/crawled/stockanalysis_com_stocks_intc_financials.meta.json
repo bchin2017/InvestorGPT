@@ -1,0 +1,10 @@
+{
+  "source": "stockanalysis",
+  "company": "Intel",
+  "ticker": "INTC",
+  "doc_type": "financial_statements",
+  "section": "financials",
+  "url": "https://stockanalysis.com/stocks/intc/financials/",
+  "date_crawled": "2026-08-06T16:29:14.173440",
+  "char_count": 8678
+}

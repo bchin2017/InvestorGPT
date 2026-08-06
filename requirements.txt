@@ -18,6 +18,8 @@ streamlit>=1.35.0
 
 # AI / LLM
 openai>=1.0.0
+tiktoken>=0.5.0
+faiss-cpu>=1.7.4
 
 # Utilities
 python-dotenv>=1.0.0
@@ -26,6 +28,10 @@ python-dotenv>=1.0.0
 firecrawl-py
 beautifulsoup4
 lxml
+
+# RAG server
+flask>=3.0.0
+flask-cors>=4.0.0
 
 # Notebook support
 ipywidgets>=8.0.0

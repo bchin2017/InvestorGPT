@@ -11,6 +11,9 @@
 | `dashboard.py` | Streamlit dashboard — INTC + MU, Buffett scoring, signals, forecasts |
 | `scripts/refresh_data.py` | Fetch/cache INTC + MU stock history from Yahoo Finance |
 | `scripts/download_10k.py` | Download Intel & Micron 10-K HTML from SEC EDGAR |
+| `scripts/crawl_sources.py` | Firecrawl-based crawler for financial web sources |
+| `scripts/build_index.py` | Chunk documents, embed, build FAISS vector index |
+| `scripts/rag_chatbot.py` | RAG chatbot with citation-backed answers |
 | `scripts/generate_dashboard.py` | Regenerate static `webpage/index.html` from 10-K data |
 | `start_investor.bat` | One-click launcher (port 8502) |
 | `_keeper.bat` | Watchdog — auto-restarts Streamlit on crash |
@@ -66,6 +69,23 @@ python scripts/generate_dashboard.py
 
 Reads `data/10k/*.html`, fetches stock prices via yfinance, writes `webpage/index.html`.
 
+## Static Dashboard Launchers (HTML + AI Chat)
+
+Use one of these two launcher files:
+
+1. `open_dashboard.bat` (full mode)
+	- Starts AI server on port 8503 if needed
+	- Refreshes market data
+	- Regenerates `webpage/index.html`
+	- Opens a loading page and auto-redirects to dashboard when ready
+
+2. `open_dashboard_fast.bat` (fast mode)
+	- Starts AI server on port 8503 if needed
+	- Skips refresh + generation
+	- Opens existing dashboard snapshot quickly
+
+If fast mode does not find `webpage/index.html`, it automatically falls back to full mode.
+
 ---
 
 ## First-Time Setup
@@ -81,8 +101,8 @@ python -m venv .venv
 Create `.env` in the project root:
 
 ```
-OPENAI_API_KEY=sk-...        # Optional — enables GPT-4o in the AI Advisor tab
-FIRECRAWL_API_KEY=fc-...     # For firecrawl-practice/ scripts
+OPENAI_API_KEY=sk-...        # Required for RAG chatbot + AI Advisor tab
+FIRECRAWL_API_KEY=fc-...     # Required for crawl_sources.py
 ```
 
 ---
@@ -96,6 +116,40 @@ Workflow: `.github/workflows/daily-market-data-refresh.yml`
 - Commits updated `data/stock_history/*.csv` and `.cache/market_data_meta.json`
 
 To trigger manually: **GitHub → Actions → Daily Market Data Refresh → Run workflow**
+
+---
+
+## RAG Chatbot Pipeline
+
+### Step 1: Crawl financial web sources
+
+```powershell
+python scripts/crawl_sources.py               # crawl all 21 URLs
+python scripts/crawl_sources.py --source macrotrends   # crawl one source
+```
+
+Available sources: `macrotrends`, `stockanalysis`, `companiesmarketcap`, `intel_ir`, `micron_ir`, `yahoo_finance`
+
+Output: `data/crawled/*.md` + `data/crawled/*.meta.json`
+
+### Step 2: Build FAISS vector index
+
+```powershell
+python scripts/build_index.py          # build index (skips if exists)
+python scripts/build_index.py --rebuild # force rebuild
+```
+
+Indexes both crawled markdown and 10-K HTML files. Output: `data/rag_index/`
+
+### Step 3: Chat
+
+```powershell
+python scripts/rag_chatbot.py                                          # interactive mode
+python scripts/rag_chatbot.py --query "Compare Intel vs Micron revenue"  # single query
+python scripts/rag_chatbot.py --query "EPS trend" --ticker INTC          # filtered
+```
+
+In interactive mode, use inline filters: `/ticker:INTC`, `/source:macrotrends`
 
 ---
 

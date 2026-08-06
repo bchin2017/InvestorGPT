@@ -1,0 +1,10 @@
+{
+  "source": "intel_ir",
+  "company": "Intel",
+  "ticker": "INTC",
+  "doc_type": "investor_relations",
+  "section": "sec_filings",
+  "url": "https://www.intc.com/financial-info/sec-filings",
+  "date_crawled": "2026-08-06T16:30:28.069955",
+  "char_count": 1401
+}

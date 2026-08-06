@@ -1,0 +1,10 @@
+{
+  "source": "macrotrends",
+  "company": "Intel",
+  "ticker": "INTC",
+  "doc_type": "financial_history",
+  "section": "balance_sheet",
+  "url": "https://www.macrotrends.net/stocks/charts/INTC/intel/balance-sheet",
+  "date_crawled": "2026-08-06T16:28:14.697286",
+  "char_count": 1906
+}

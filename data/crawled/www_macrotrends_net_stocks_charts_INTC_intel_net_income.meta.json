@@ -1,0 +1,10 @@
+{
+  "source": "macrotrends",
+  "company": "Intel",
+  "ticker": "INTC",
+  "doc_type": "financial_history",
+  "section": "net_income",
+  "url": "https://www.macrotrends.net/stocks/charts/INTC/intel/net-income",
+  "date_crawled": "2026-08-06T16:28:08.173102",
+  "char_count": 7415
+}

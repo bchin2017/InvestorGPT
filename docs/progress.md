@@ -42,13 +42,54 @@
 - [ ] Micron Net Income FY2024 — regex picks up wrong value
 - [ ] Stock price chart — yfinance silent failure needs debugging
 
-### Phase 3 — RAG Chatbot (Not Started)
-- [ ] PDF/HTML ingestion → clean Markdown chunks
-- [ ] Embedding + vector store (FAISS)
-- [ ] LLM integration (Azure OpenAI GPT-4o)
-- [ ] Chat UI (Streamlit tab or standalone page)
-- [ ] Citation-backed answer generation
-- [ ] Company comparison via RAG
+### Phase 3 — Intelligent RAG System / SemiconInvest AI (Completed — 2026-08-06)
+
+**Index & Crawling**
+- [x] `scripts/crawl_sources.py` — Firecrawl crawler for 21 financial URLs (6 source types)
+- [x] `scripts/build_index.py` — Chunking (500–800 tokens, overlap) + text-embedding-3-large + FAISS
+- [x] 10-K HTML ingestion (BeautifulSoup) — 6 filings (Intel + Micron FY2022–FY2024)
+- [x] All 21 sources crawled → `data/crawled/` (21 .md + 21 .meta.json)
+- [x] FAISS index built: **754 vectors**, dim=3072 → `data/rag_index/`
+- [x] Metadata: source, company, ticker, doc_type, fiscal_year, section, URL
+
+**RAG Server (`scripts/rag_server.py`)**
+- [x] Flask REST API on port 8503 with CORS
+- [x] `/chat` — RAG-only (FAISS + GPT-4o)
+- [x] `/chat/general` — Intelligent query router
+- [x] `/analytics` — Direct CSV analytics (no LLM call)
+- [x] `/health` — server status + API key check
+- [x] `/data-sources` — full catalogue with chunk/row counts
+- [x] `lookup_stock_price()` — date-regex → nearest-day CSV → OHLCV string
+
+**Intelligent Query Router**
+- [x] `classify_query()` → routes to `csv_price | csv_analytics | faiss | mixed`
+- [x] `detect_tickers_in_query()` — INTC/MU from natural language
+- [x] `detect_year_in_query()` — fiscal years 2019–2026 from question text
+- [x] `compute_stock_analytics()` — Total Return, CAGR, Volatility, Max Drawdown, MA50/MA200
+- [x] Multi-ticker side-by-side comparison from CSV (INTC vs MU example: −25% vs +67.1% in 2023–2024)
+- [x] `/chat/general` response includes `query_type`, `tickers_detected`, `years_detected`
+
+**RAG Chatbot (`scripts/rag_chatbot.py`)**
+- [x] `retrieve(..., year=)` — fiscal year filter on FAISS chunk metadata
+- [x] Over-fetch 5× when filters active to maintain top_k after filtering
+- [x] Confidence scoring per chunk (high ≥ 0.70, medium ≥ 0.40, low < 0.40)
+- [x] `format_context()` — Year, Section, Confidence label per chunk
+- [x] Low-confidence caveat injected into GPT-4o system message (top score < 0.3)
+
+**AI Chat Tab (`webpage/index.html`)**
+- [x] 3-mode toggle: Server AI / Direct API / RAG Only
+- [x] Provider: OpenAI / Gemini; Model selector
+- [x] API Key auto-validate on paste (debounced), clear button with auto-fallback
+- [x] Temperature, Max Tokens, Top P, CORS Relay (all in `localStorage`)
+- [x] Network proxy auto-detection
+- [x] Auto-connect: picks best mode on page load
+
+**Pending — Next Phase**
+- [ ] Add 10-Q filings to FAISS index (more granular quarterly data)
+- [ ] Add earnings call transcripts as a crawled source
+- [ ] Executive Summary generator (Bull/Bear/SWOT) from retrieved evidence only
+- [ ] Trend analysis queries: "How has Intel AI strategy evolved 2022–2024?"
+- [ ] Company comparison via RAG in Streamlit dashboard tab
 
 ### Phase 4 — Enhancements
 - [ ] Add AMD, NVDA tickers to dashboard
@@ -68,21 +109,29 @@ start_investor.bat
             Tabs: Price+Signal | Buffett Score | Fundamentals | Forecast | Compare | AI Advisor
 ```
 
-## Architecture — Planned (Phase 3 RAG)
+## Architecture — Phase 3 RAG (Implemented)
 
 ```
-User → Streamlit Chat UI
+User → rag_chatbot.py (interactive or CLI)
           ↓
-       GPT-4o (Azure OpenAI)
+       GPT-4o (OpenAI)
           ↓
-    Retrieval Layer (LangChain / LlamaIndex)
+    FAISS Retrieval (cosine similarity, top-k, metadata filters)
           ↓
-    FAISS Vector DB ← 10-K Markdown chunks
+    FAISS Vector DB  ←  build_index.py
+       (text-embedding-3-large, 3072-dim)
+          ↓
+    Chunked Documents (500-800 tokens, overlap)
+          ↓
+    crawl_sources.py (Firecrawl → data/crawled/)
+    +  10-K HTML (data/10k/)
 ```
 
 ---
 
 ## Data Sources
+
+### SEC EDGAR 10-K Filings
 
 | Company | Filing | Filed | Status |
 |---|---|---|---|
@@ -92,3 +141,14 @@ User → Streamlit Chat UI
 | Micron | FY2023 10-K | Oct 2023 | Downloaded |
 | Micron | FY2024 10-K | Oct 2024 | Downloaded |
 | Micron | FY2025 10-K | Oct 2025 | Downloaded |
+
+### Firecrawl Web Sources (Phase 3)
+
+| Source | URLs | Data | Companies |
+|---|---|---|---|
+| Macrotrends | 8 | Revenue, EPS, net income, cash flow, balance sheet | INTC, MU |
+| StockAnalysis | 4 | Annual & quarterly financial statements | INTC, MU |
+| CompaniesMarketCap | 2 | Market cap history & rankings | INTC, MU |
+| Intel IR | 3 | Financial info, SEC filings, press releases | INTC |
+| Micron IR | 2 | Quarterly results, news releases | MU |
+| Yahoo Finance | 2 | Quote summaries | INTC, MU |

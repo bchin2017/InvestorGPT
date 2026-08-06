@@ -1,0 +1,10 @@
+{
+  "source": "stockanalysis",
+  "company": "Micron",
+  "ticker": "MU",
+  "doc_type": "financial_statements",
+  "section": "financials",
+  "url": "https://stockanalysis.com/stocks/mu/financials/",
+  "date_crawled": "2026-08-06T16:29:20.354325",
+  "char_count": 8943
+}

@@ -1,0 +1,10 @@
+{
+  "source": "yahoo_finance",
+  "company": "Micron",
+  "ticker": "MU",
+  "doc_type": "stock_summary",
+  "section": "quote",
+  "url": "https://finance.yahoo.com/quote/MU/",
+  "date_crawled": "2026-08-06T16:32:21.589658",
+  "char_count": 7812
+}

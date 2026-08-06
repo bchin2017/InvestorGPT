@@ -24,18 +24,25 @@ InvestorGPT/
 │  ├─ stock_history/
 │  │  ├─ intc_history.csv                ← generated, tracked by git
 │  │  └─ mu_history.csv                  ← generated, tracked by git
-│  └─ 10k/                               ← gitignored (large, re-downloadable)
-│     ├─ Intel_10K_2023_2023-01-27.html
-│     ├─ Intel_10K_2024_2024-01-26.html
-│     ├─ Intel_10K_2025_2025-01-31.html
-│     ├─ Micron_10K_2023_2023-10-06.html
-│     ├─ Micron_10K_2024_2024-10-04.html
-│     └─ Micron_10K_2025_2025-10-03.html
+│  ├─ 10k/                               ← gitignored (large, re-downloadable)
+│  │  ├─ Intel_10K_2023_2023-01-27.html
+│  │  ├─ Intel_10K_2024_2024-01-26.html
+│  │  ├─ Intel_10K_2025_2025-01-31.html
+│  │  ├─ Micron_10K_2023_2023-10-06.html
+│  │  ├─ Micron_10K_2024_2024-10-04.html
+│  │  └─ Micron_10K_2025_2025-10-03.html
+│  ├─ crawled/                           ← gitignored (Firecrawl output)
+│  │  ├─ *.md                            ← scraped markdown per URL
+│  │  └─ *.meta.json                     ← source/ticker/section metadata
+│  └─ rag_index/                         ← gitignored (generated)
+│     ├─ faiss.index
+│     └─ chunks_meta.json
 ├─ docs/
-│  ├─ README.md
+│  ├─ README.md                          ← docs index
 │  ├─ HOW_TO_RUN.md
 │  ├─ SIGNAL_LOGIC.md
 │  ├─ CONTEXT_RESTORE.md     ← this file
+│  ├─ tool-use.md
 │  ├─ CHANGELOG.md
 │  └─ progress.md
 ├─ firecrawl-practice/
@@ -43,7 +50,10 @@ InvestorGPT/
 ├─ scripts/
 │  ├─ refresh_data.py        ← Yahoo Finance multi-ticker refresh
 │  ├─ download_10k.py        ← SEC EDGAR 10-K downloader
-│  └─ generate_dashboard.py  ← Static HTML generator
+│  ├─ generate_dashboard.py  ← Static HTML generator
+│  ├─ crawl_sources.py       ← Firecrawl multi-source crawler
+│  ├─ build_index.py         ← Chunking + embedding + FAISS builder
+│  └─ rag_chatbot.py         ← RAG chatbot (CLI + interactive)
 ├─ webpage/
 │  └─ index.html
 ├─ dashboard.py              ← Main Streamlit app
@@ -81,8 +91,8 @@ InvestorGPT/
 ## 4) Environment Variables (`.env`)
 
 ```
-OPENAI_API_KEY=sk-...        # GPT-4o responses in AI Advisor tab (optional)
-FIRECRAWL_API_KEY=fc-...     # firecrawl-practice/ scripts
+OPENAI_API_KEY=sk-...        # Required — GPT-4o (AI Advisor + RAG chatbot) + embeddings
+FIRECRAWL_API_KEY=fc-...     # Required — crawl_sources.py
 ```
 
 ---
@@ -103,7 +113,9 @@ FIRECRAWL_API_KEY=fc-...     # firecrawl-practice/ scripts
 |---|---|---|
 | Yahoo Finance Chart API | INTC, MU daily OHLCV | `scripts/refresh_data.py` |
 | SEC EDGAR | Intel & Micron 10-K HTML | `scripts/download_10k.py` |
-| OpenAI GPT-4o | AI Advisor responses | `.env OPENAI_API_KEY` |
+| Firecrawl | 21 financial web pages (6 sources) | `scripts/crawl_sources.py` |
+| OpenAI text-embedding-3-large | Vector embeddings | `scripts/build_index.py` |
+| OpenAI GPT-4o | AI Advisor + RAG chatbot | `dashboard.py`, `scripts/rag_chatbot.py` |
 
 ---
 

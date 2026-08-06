@@ -366,6 +366,7 @@ body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
     <li class="nav-item"><button class="nav-link" data-tab="buffett">&#129658; Buffett Score</button></li>
     <li class="nav-item"><button class="nav-link" data-tab="fund">&#128196; Fundamentals</button></li>
     <li class="nav-item"><button class="nav-link" data-tab="forecast">&#128302; Forecast</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="chat">&#129302; AI Chat</button></li>
   </ul>
 
   <!-- price tab -->
@@ -433,6 +434,71 @@ body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
       </div>
       <div class="col-lg-3">
         <div class="card p-3 h-100" id="forecastMetrics"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ai chat tab -->
+  <div id="tab-chat" style="display:none">
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card p-3 h-100 d-flex flex-column" style="min-height:520px">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-semibold mb-0">&#129302; SemiconInvest AI</h6>
+            <div class="btn-group btn-group-sm" id="chatModeGroup">
+              <button class="btn btn-outline-secondary" id="modeServer" onclick="setChatMode('server')">Server AI</button>
+              <button class="btn btn-outline-secondary" id="modeDirect" onclick="setChatMode('direct')">Direct API</button>
+              <button class="btn btn-outline-secondary" id="modeRag"    onclick="setChatMode('rag')">RAG Only</button>
+            </div>
+          </div>
+          <div id="chatServerStatus" class="small mb-2"></div>
+          <div id="chatHistory" style="flex:1;overflow-y:auto;background:#f8f9fa;border-radius:8px;padding:12px;min-height:320px;max-height:380px;" class="mb-3"></div>
+          <div class="input-group">
+            <input id="chatInput" type="text" class="form-control" placeholder="Ask about INTC or MU..." onkeydown="if(event.key==='Enter')sendChat()">
+            <button class="btn btn-primary" onclick="sendChat()" id="chatSendBtn">Send</button>
+          </div>
+          <div class="mt-2">
+            <span class="caveat">Suggested: </span>
+            <span class="caveat" style="cursor:pointer;text-decoration:underline" onclick="setQ('What is Intel revenue trend 2022-2024?')">Intel revenue trend</span> &middot;
+            <span class="caveat" style="cursor:pointer;text-decoration:underline" onclick="setQ('Compare INTC vs MU returns 2023 to 2024')">INTC vs MU returns</span> &middot;
+            <span class="caveat" style="cursor:pointer;text-decoration:underline" onclick="setQ('What is Micron HBM strategy?')">Micron HBM strategy</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card p-3 h-100">
+          <h6 class="fw-semibold mb-3">&#9881; AI Settings</h6>
+          <div id="directApiPanel" style="display:none">
+            <label class="form-label small fw-semibold">Provider</label>
+            <select id="aiProvider" class="form-select form-select-sm mb-2" onchange="saveAiSettings()">
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Gemini</option>
+            </select>
+            <label class="form-label small fw-semibold">API Key</label>
+            <div class="input-group input-group-sm mb-1">
+              <input type="password" id="aiApiKey" class="form-control" placeholder="sk-..." oninput="debounceValidate()">
+              <button class="btn btn-outline-secondary" onclick="clearApiKey()">Clear</button>
+            </div>
+            <div id="keyStatus" class="small mb-2"></div>
+            <label class="form-label small fw-semibold">Model</label>
+            <select id="aiModel" class="form-select form-select-sm mb-2" onchange="saveAiSettings()"></select>
+          </div>
+          <label class="form-label small fw-semibold">Temperature <span id="tempVal">0.7</span></label>
+          <input type="range" id="aiTemp" class="form-range mb-2" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('tempVal').textContent=this.value;saveAiSettings()">
+          <label class="form-label small fw-semibold">Max Tokens</label>
+          <select id="aiMaxTokens" class="form-select form-select-sm mb-2" onchange="saveAiSettings()">
+            <option value="512">512</option><option value="1024">1024</option>
+            <option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option>
+          </select>
+          <label class="form-label small fw-semibold">Top P <span id="topPVal">1.0</span></label>
+          <input type="range" id="aiTopP" class="form-range mb-3" min="0" max="1" step="0.05" value="1.0" oninput="document.getElementById('topPVal').textContent=this.value;saveAiSettings()">
+          <div id="serverModeInfo" class="alert alert-info p-2 small mb-0" style="display:none">
+            &#127760; Using server-side API key. No browser key needed.
+          </div>
+          <div id="ragModeInfo" class="alert alert-secondary p-2 small mb-0" style="display:none">
+            &#128196; RAG Only: FAISS retrieval without GPT synthesis.
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -671,18 +737,207 @@ function renderCompare(){
   ]},options:{responsive:true,scales:{y:{max:100}},plugins:{legend:{position:'top'}}}});
 }
 
+// ── AI Chat ────────────────────────────────────────────────────
+const RAG_SERVER = 'http://localhost:8503';
+let chatMode = 'server';
+let serverOnline = false;
+let _validateTimer = null;
+
+const OPENAI_MODELS  = ['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'];
+const GEMINI_MODELS  = ['gemini-2.0-flash','gemini-1.5-flash','gemini-1.5-pro'];
+
+function loadAiSettings(){
+  const saved = k => localStorage.getItem('ai_'+k);
+  if(saved('provider')) document.getElementById('aiProvider').value = saved('provider');
+  if(saved('apiKey'))   document.getElementById('aiApiKey').value   = saved('apiKey');
+  if(saved('temp'))     { document.getElementById('aiTemp').value = saved('temp'); document.getElementById('tempVal').textContent = saved('temp'); }
+  if(saved('tokens'))   document.getElementById('aiMaxTokens').value = saved('tokens');
+  if(saved('topP'))     { document.getElementById('aiTopP').value = saved('topP'); document.getElementById('topPVal').textContent = saved('topP'); }
+  updateModelList();
+}
+function saveAiSettings(){
+  const s = (k,v) => localStorage.setItem('ai_'+k, v);
+  s('provider', document.getElementById('aiProvider').value);
+  s('temp',     document.getElementById('aiTemp').value);
+  s('tokens',   document.getElementById('aiMaxTokens').value);
+  s('topP',     document.getElementById('aiTopP').value);
+  const key = document.getElementById('aiApiKey').value.trim();
+  if(key) s('apiKey', key);
+  updateModelList();
+}
+function updateModelList(){
+  const prov = document.getElementById('aiProvider').value;
+  const sel  = document.getElementById('aiModel');
+  const saved = localStorage.getItem('ai_model');
+  const list = prov==='gemini' ? GEMINI_MODELS : OPENAI_MODELS;
+  sel.innerHTML = list.map(m=>`<option value="${m}"${m===saved?' selected':''}>${m}</option>`).join('');
+  sel.onchange = ()=>{ localStorage.setItem('ai_model', sel.value); };
+}
+async function checkServer(){
+  try{
+    const r = await fetch(RAG_SERVER+'/health',{signal:AbortSignal.timeout(2000)});
+    const j = await r.json();
+    serverOnline = j.status==='ok';
+    const el = document.getElementById('chatServerStatus');
+    el.innerHTML = serverOnline
+      ? '<span class="text-success">&#9679; Server online (port 8503)</span>'
+      : '<span class="text-warning">&#9679; Server offline</span>';
+    return serverOnline;
+  } catch(e){
+    serverOnline = false;
+    document.getElementById('chatServerStatus').innerHTML = '<span class="text-danger">&#9679; Server offline &mdash; start rag_server.py</span>';
+    return false;
+  }
+}
+async function initChat(){
+  loadAiSettings();
+  const online = await checkServer();
+  const savedMode = localStorage.getItem('ai_chatMode');
+  const key = localStorage.getItem('ai_apiKey');
+  if(savedMode) setChatMode(savedMode);
+  else if(online) setChatMode('server');
+  else if(key) setChatMode('direct');
+  else setChatMode('rag');
+}
+function setChatMode(mode){
+  chatMode = mode;
+  localStorage.setItem('ai_chatMode', mode);
+  ['server','direct','rag'].forEach(m=>{
+    document.getElementById('mode'+m.charAt(0).toUpperCase()+m.slice(1))?.classList.toggle('active', m===mode);
+  });
+  document.getElementById('directApiPanel').style.display = mode==='direct' ? '' : 'none';
+  document.getElementById('serverModeInfo').style.display  = mode==='server' ? '' : 'none';
+  document.getElementById('ragModeInfo').style.display     = mode==='rag'    ? '' : 'none';
+}
+function setQ(q){ document.getElementById('chatInput').value=q; document.getElementById('chatInput').focus(); }
+function appendMsg(role, html){
+  const h = document.getElementById('chatHistory');
+  const div = document.createElement('div');
+  div.className = 'mb-2';
+  div.innerHTML = role==='user'
+    ? `<div class="text-end"><span class="badge bg-primary px-2 py-1" style="white-space:normal;max-width:80%;text-align:left">${html}</span></div>`
+    : `<div><span style="background:#e9ecef;border-radius:8px;padding:8px 12px;display:inline-block;max-width:90%;font-size:.92rem">${html}</span></div>`;
+  h.appendChild(div);
+  h.scrollTop = h.scrollHeight;
+}
+function appendCite(txt){
+  if(!txt) return;
+  const h = document.getElementById('chatHistory');
+  const div = document.createElement('div');
+  div.className = 'mb-2';
+  div.innerHTML = `<div class="caveat" style="padding-left:4px;color:#6c757d">${txt}</div>`;
+  h.appendChild(div);
+  h.scrollTop = h.scrollHeight;
+}
+async function sendChat(){
+  const input = document.getElementById('chatInput');
+  const q = input.value.trim();
+  if(!q) return;
+  input.value='';
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled=true; btn.textContent='...';
+  appendMsg('user', q);
+  const thinking = document.createElement('div');
+  thinking.id='chatThinking'; thinking.className='mb-2';
+  thinking.innerHTML='<span class="text-muted small"><em>Thinking...</em></span>';
+  document.getElementById('chatHistory').appendChild(thinking);
+  try{
+    if(chatMode==='server')       await callServer(q);
+    else if(chatMode==='rag')     await callRagOnly(q);
+    else                          await callDirectApi(q);
+  } catch(e){
+    document.getElementById('chatThinking')?.remove();
+    appendMsg('bot', '&#10060; Error: '+e.message);
+  }
+  btn.disabled=false; btn.textContent='Send';
+}
+async function callServer(q){
+  const r = await fetch(RAG_SERVER+'/chat/general',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({question:q, temperature:parseFloat(document.getElementById('aiTemp').value),
+      max_tokens:parseInt(document.getElementById('aiMaxTokens').value)})
+  });
+  const j = await r.json();
+  document.getElementById('chatThinking')?.remove();
+  if(j.error){ appendMsg('bot','&#10060; '+j.error); return; }
+  const meta = j.query_type ? `<br><span class="caveat">Route: ${j.query_type} | Tickers: ${(j.tickers_detected||[]).join(',')}</span>` : '';
+  appendMsg('bot', j.answer.replace(/\\n/g,'<br>')+meta);
+  if(j.citations) appendCite('&#128196; '+j.citations);
+}
+async function callRagOnly(q){
+  const r = await fetch(RAG_SERVER+'/chat',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({question:q})
+  });
+  const j = await r.json();
+  document.getElementById('chatThinking')?.remove();
+  if(j.error){ appendMsg('bot','&#10060; '+j.error); return; }
+  appendMsg('bot', j.answer.replace(/\\n/g,'<br>'));
+  if(j.citations) appendCite('&#128196; '+j.citations);
+}
+async function callDirectApi(q){
+  const key   = localStorage.getItem('ai_apiKey')||'';
+  const prov  = document.getElementById('aiProvider').value;
+  const model = document.getElementById('aiModel').value;
+  const temp  = parseFloat(document.getElementById('aiTemp').value);
+  const maxTok= parseInt(document.getElementById('aiMaxTokens').value);
+  const topP  = parseFloat(document.getElementById('aiTopP').value);
+  if(!key){ appendMsg('bot','&#128274; No API key saved. Paste your key in the settings panel.'); document.getElementById('chatThinking')?.remove(); return; }
+  if(prov==='gemini'){
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:q}]}],generationConfig:{temperature:temp,maxOutputTokens:maxTok,topP}})});
+    const j = await r.json();
+    document.getElementById('chatThinking')?.remove();
+    const ans = j.candidates?.[0]?.content?.parts?.[0]?.text || j.error?.message || 'No response';
+    appendMsg('bot', ans.replace(/\\n/g,'<br>'));
+  } else {
+    const r = await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model,temperature:temp,max_tokens:maxTok,top_p:topP,
+        messages:[{role:'system',content:'You are SemiconInvest AI, an expert semiconductor investment analyst specializing in Intel (INTC) and Micron (MU).'},
+                  {role:'user',content:q}]})});
+    const j = await r.json();
+    document.getElementById('chatThinking')?.remove();
+    if(j.error){ appendMsg('bot','&#10060; '+j.error.message); return; }
+    appendMsg('bot', (j.choices?.[0]?.message?.content||'').replace(/\\n/g,'<br>'));
+  }
+}
+function debounceValidate(){
+  clearTimeout(_validateTimer);
+  _validateTimer = setTimeout(async ()=>{
+    const key = document.getElementById('aiApiKey').value.trim();
+    const el  = document.getElementById('keyStatus');
+    if(!key){ el.innerHTML=''; return; }
+    localStorage.setItem('ai_apiKey', key);
+    el.innerHTML='<em class="text-muted">Validating...</em>';
+    try{
+      const r = await fetch('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+key},signal:AbortSignal.timeout(5000)});
+      el.innerHTML = r.ok ? '&#9989; Valid key' : '&#10060; Invalid key';
+      if(r.ok) saveAiSettings();
+    } catch(e){ el.innerHTML='&#10060; Could not validate'; }
+  }, 400);
+}
+function clearApiKey(){
+  document.getElementById('aiApiKey').value='';
+  document.getElementById('keyStatus').innerHTML='';
+  localStorage.removeItem('ai_apiKey');
+  setChatMode(serverOnline ? 'server' : 'rag');
+}
+
 // ── tab switching ─────────────────────────────────────────────
 document.querySelectorAll('#mainTabs button').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('#mainTabs button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    ['price','buffett','fund','forecast'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
+    ['price','buffett','fund','forecast','chat'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
     document.getElementById('tab-'+btn.dataset.tab).style.display='';
     const d=ALL[activeTicker];
     if(btn.dataset.tab==='price') renderPriceTab(d);
     else if(btn.dataset.tab==='buffett') renderBuffettTab(d);
     else if(btn.dataset.tab==='fund') renderFundTab(d);
     else if(btn.dataset.tab==='forecast') renderForecastTab(d);
+    else if(btn.dataset.tab==='chat') initChat();
   });
 });
 

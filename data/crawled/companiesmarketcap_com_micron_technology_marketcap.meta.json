@@ -1,0 +1,10 @@
+{
+  "source": "companiesmarketcap",
+  "company": "Micron",
+  "ticker": "MU",
+  "doc_type": "market_cap",
+  "section": "market_cap_history",
+  "url": "https://companiesmarketcap.com/micron-technology/marketcap/",
+  "date_crawled": "2026-08-06T16:29:43.464042",
+  "char_count": 7642
+}
