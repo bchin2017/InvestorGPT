@@ -1,8 +1,8 @@
 # InvestorGPT – Project Progress
 
-## Status: In Progress — Phase 2 (Streamlit Dashboard + Automation)
+## Status: In Progress — Phase 5 (UI Polish & Presentation Ready)
 
-**Last updated:** 2026-08-06
+**Last updated:** 2026-08-07
 
 ---
 
@@ -161,6 +161,33 @@
 - [ ] Bull/Bear case generation from retrieved evidence
 - [ ] Automated investment thesis generation
 - [ ] Hybrid architecture: CSV/SQL for numerical data + FAISS for documents + GPT-4o synthesis with citations
+
+### Phase 5B — UI Polish & Presentation Ready (2026-08-07)
+
+**Branding & Identity**
+- [x] Page title changed to "InvestorGPT"
+- [x] Header renamed: SemiconInvest AI → InvestorGPT
+- [x] Subtitle: "AI-Powered Semiconductor Investment Advisor (INTC & MU)"
+- [x] Chat panel header: InvestorGPT
+- [x] System prompt persona: InvestorGPT
+
+**Server Reliability**
+- [x] `open_dashboard.bat`: `cmd /c` → `cmd /k` (server window stays open for debugging)
+- [x] Timeout increased 30s → 45s for FAISS index load
+- [x] Auto-reconnect polling: `_serverPoll` setInterval(5000) in `initChat()`
+- [x] Fix documented in `docs/TROUBLESHOOTING.md` + repo memory
+
+**Documentation**
+- [x] `docs/tool-use.md` — 15-category capstone rubric table with detailed usage descriptions
+- [x] Categories ordered per rubric: Working Prototype → RAG → Advanced Chunking → Agent → Memory → Tool Use → Web Search → Local LLM → Data Pipeline → Multiple Data Sources → Fine-tuning → Evaluation → Deployment → Bonus Tech → Real Use Cases
+
+**UI/UX Enhancements**
+- [x] Dark mode toggle (🌓 button in header, persisted via localStorage)
+- [x] CSS variables: `--bg`, `--card-bg`, `--text`, `--muted`, `--shadow` for theme switching
+- [x] Smooth transition on theme change (0.3s)
+- [x] Professional footer: tech stack summary + "Not financial advice" disclaimer
+- [x] Footer timestamp matches dashboard generation date
+- [x] All changes in both `webpage/index.html` and `scripts/generate_dashboard.py`
 
 ---
 

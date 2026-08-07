@@ -140,8 +140,9 @@ def compute_signal_factors(ps: pd.Series) -> tuple[float, dict]:
                    "golden_cross":bool(_ma50>_ma200)}
 
 
-def compute_signal_series(ps: pd.Series, n: int = 756) -> list:
-    ps=ps.tail(n)
+def compute_signal_series(ps: pd.Series, n: int = 0) -> list:
+    if n > 0:
+        ps=ps.tail(n)
     _d=ps.diff()
     _g=_d.clip(lower=0).ewm(alpha=1/14,min_periods=14,adjust=False).mean()
     _l=(-_d.clip(upper=0)).ewm(alpha=1/14,min_periods=14,adjust=False).mean()
@@ -276,7 +277,7 @@ def build_ticker_data(ticker: str) -> dict:
     print(f"  {ticker}: loading...")
     df=load_stock_df(ticker)
     cur=float(df["Close"].iloc[-1]); prev=float(df["Close"].iloc[-2]) if len(df)>1 else cur
-    df_p=df.tail(756)
+    df_p=df
     dates =[d.strftime("%Y-%m-%d") for d in df_p.index]
     prices=[round(float(v),2) for v in df_p["Close"].values]
     ma50  =[round(float(v),2) if not np.isnan(v) else None for v in df_p["Close"].rolling(50).mean().values]
@@ -327,17 +328,21 @@ HTML_TEMPLATE = """\
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <style>
-body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
-.card{border:none;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
-.metric-card{border-radius:10px;padding:14px 18px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+:root{--bg:#f0f2f5;--card-bg:#fff;--text:#212529;--muted:#888;--shadow:rgba(0,0,0,.08);--shadow-sm:rgba(0,0,0,.07)}
+[data-theme="dark"]{--bg:#1a1d23;--card-bg:#2d3139;--text:#e4e6ea;--muted:#aaa;--shadow:rgba(0,0,0,.3);--shadow-sm:rgba(0,0,0,.2)}
+body{background:var(--bg);font-family:'Segoe UI',sans-serif;color:var(--text);transition:background .3s,color .3s}
+.card{border:none;border-radius:12px;box-shadow:0 2px 10px var(--shadow);background:var(--card-bg);color:var(--text)}
+.metric-card{border-radius:10px;padding:14px 18px;background:var(--card-bg);box-shadow:0 1px 6px var(--shadow-sm)}
 .metric-val{font-size:1.4rem;font-weight:700}
-.metric-lbl{font-size:.75rem;color:#888;text-transform:uppercase;letter-spacing:.03em}
+.metric-lbl{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .tab-pane canvas{max-height:300px}
 .factor-chip{display:inline-block;padding:4px 10px;border-radius:20px;font-size:.78rem;font-weight:600;margin:2px}
 .action-box{border-radius:12px;padding:16px 20px;color:#fff}
-.caveat{font-size:.78rem;color:#999}
+.caveat{font-size:.78rem;color:var(--muted)}
 .nav-pills .nav-link.active{background:#0d6efd}
 .ticker-btn.active{background:#0d6efd!important;color:#fff!important;border-color:#0d6efd!important}
+.theme-toggle{cursor:pointer;font-size:1.2rem;padding:4px 8px;border-radius:8px;border:1px solid #dee2e6;background:transparent}
+.footer{text-align:center;padding:20px 0 10px;font-size:.8rem;color:var(--muted);border-top:1px solid rgba(128,128,128,.2);margin-top:30px}
 </style>
 </head>
 <body>
@@ -349,10 +354,13 @@ body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
     <h4 class="mb-0 fw-bold">&#129302; InvestorGPT</h4>
     <small class="text-muted">AI-Powered Semiconductor Investment Advisor (INTC &amp; MU) &middot; Generated: <span id="genTs"></span></small>
   </div>
-  <div class="ms-auto btn-group" role="group">
-    <button class="btn btn-outline-primary ticker-btn active" onclick="switchTicker('INTC',this)">INTC</button>
-    <button class="btn btn-outline-primary ticker-btn" onclick="switchTicker('MU',this)">MU</button>
-    <button class="btn btn-outline-secondary ticker-btn" onclick="switchTicker('CMP',this)">Compare</button>
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <div class="btn-group" role="group">
+      <button class="btn btn-outline-primary ticker-btn active" onclick="switchTicker('INTC',this)">INTC</button>
+      <button class="btn btn-outline-primary ticker-btn" onclick="switchTicker('MU',this)">MU</button>
+      <button class="btn btn-outline-secondary ticker-btn" onclick="switchTicker('CMP',this)">Compare</button>
+    </div>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">&#127763;</button>
   </div>
 </div>
 
@@ -371,17 +379,32 @@ body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
 
   <!-- price tab -->
   <div id="tab-price">
-    <div class="row g-3">
-      <div class="col-lg-8">
-        <div class="card p-3"><h6 class="fw-semibold">Price &amp; Moving Averages</h6>
-          <canvas id="priceChart"></canvas></div>
+    <div class="mb-2 d-flex align-items-center gap-3 flex-wrap">
+      <div class="btn-group btn-group-sm" id="periodGroup">
+        <button class="btn btn-outline-secondary" onclick="setPeriod(1)">1Y</button>
+        <button class="btn btn-outline-secondary active" onclick="setPeriod(3)">3Y</button>
+        <button class="btn btn-outline-secondary" onclick="setPeriod(5)">5Y</button>
+        <button class="btn btn-outline-secondary" onclick="setPeriod(10)">10Y</button>
+        <button class="btn btn-outline-secondary" onclick="setPeriod(20)">20Y</button>
+        <button class="btn btn-outline-secondary" onclick="setPeriod(0)">All</button>
       </div>
-      <div class="col-lg-4">
-        <div class="card p-3 h-100"><h6 class="fw-semibold">Buy/Sell Signal (0=Buy, 100=Sell)</h6>
-          <canvas id="signalChart"></canvas></div>
+      <div id="rangeSliderWrap" style="display:none;flex:1;min-width:250px">
+        <div class="d-flex align-items-center gap-2">
+          <input type="range" id="rangeStart" class="form-range" min="0" value="0" oninput="onRangeChange()" style="flex:1">
+          <input type="range" id="rangeEnd" class="form-range" min="0" value="0" oninput="onRangeChange()" style="flex:1">
+        </div>
+        <div class="text-center"><small class="text-muted" id="rangeLbl"></small></div>
       </div>
     </div>
-    <div class="card p-3 mt-3">
+    <div class="card p-3 mb-3">
+      <h6 class="fw-semibold">Price &amp; Moving Averages</h6>
+      <canvas id="priceChart"></canvas>
+    </div>
+    <div class="card p-3 mb-3">
+      <h6 class="fw-semibold">Buy/Sell Signal (0=Buy, 100=Sell)</h6>
+      <canvas id="signalChart"></canvas>
+    </div>
+    <div class="card p-3">
       <h6 class="fw-semibold mb-2">Signal Factors</h6>
       <div id="factorTiles"></div>
     </div>
@@ -567,26 +590,75 @@ function renderStrip(d){
     </div>`).join('');
 }
 
+// ── period filter ─────────────────────────────────────────────
+let activePeriod = 3;
+let customRange = null; // [startIdx, endIdx] for range slider
+function setPeriod(years){
+  activePeriod = years;
+  customRange = null;
+  document.querySelectorAll('#periodGroup button').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  const slider = document.getElementById('rangeSliderWrap');
+  if(slider) slider.style.display = years===0 ? '' : 'none';
+  renderPriceTab(ALL[activeTicker]);
+}
+function sliceByPeriod(arr, dates, years){
+  if(customRange) return arr.slice(customRange[0], customRange[1]+1);
+  if(!years || !arr) return arr;
+  const total = dates.length;
+  const tradingDaysPerYear = 252;
+  const keep = Math.min(years * tradingDaysPerYear, total);
+  return arr.slice(total - keep);
+}
+function onRangeChange(){
+  const d = ALL[activeTicker];
+  const lo = parseInt(document.getElementById('rangeStart').value);
+  const hi = parseInt(document.getElementById('rangeEnd').value);
+  if(lo >= hi) return;
+  customRange = [lo, hi];
+  document.getElementById('rangeLbl').textContent =
+    d.dates[lo].split(' ')[0] + ' → ' + d.dates[hi].split(' ')[0];
+  renderPriceTab(d);
+}
+function initRangeSlider(){
+  const d = ALL[activeTicker];
+  const n = d.dates.length - 1;
+  const rs = document.getElementById('rangeStart');
+  const re = document.getElementById('rangeEnd');
+  if(!rs) return;
+  rs.max = n; re.max = n;
+  rs.value = 0; re.value = n;
+  document.getElementById('rangeLbl').textContent =
+    d.dates[0].split(' ')[0] + ' → ' + d.dates[n].split(' ')[0];
+}
+
 // ── price & signal charts ─────────────────────────────────────
 function renderPriceTab(d){
+  const dates = sliceByPeriod(d.dates, d.dates, activePeriod);
+  const prices = sliceByPeriod(d.prices, d.dates, activePeriod);
+  const ma50 = sliceByPeriod(d.ma50, d.dates, activePeriod);
+  const ma200 = sliceByPeriod(d.ma200, d.dates, activePeriod);
+  const signals = sliceByPeriod(d.signal_series, d.dates, activePeriod);
   const clr = d.color;
   mkChart('priceChart',{type:'line',data:{
-    labels:d.dates,
+    labels:dates,
     datasets:[
-      {label:'Price',data:d.prices,borderColor:clr,backgroundColor:clr+'18',borderWidth:1.5,pointRadius:0,tension:.2,fill:true},
-      {label:'MA 50',data:d.ma50,borderColor:'#f59e0b',borderWidth:1.2,pointRadius:0,tension:.2,borderDash:[4,2]},
-      {label:'MA 200',data:d.ma200,borderColor:'#6366f1',borderWidth:1.2,pointRadius:0,tension:.2,borderDash:[6,3]},
-    ]},options:{responsive:true,interaction:{mode:'index',intersect:false},
+      {label:'Price',data:prices,borderColor:clr,backgroundColor:clr+'18',borderWidth:1.5,pointRadius:0,tension:.2,fill:true},
+      {label:'MA 50',data:ma50,borderColor:'#f59e0b',borderWidth:1.2,pointRadius:0,tension:.2,borderDash:[4,2]},
+      {label:'MA 200',data:ma200,borderColor:'#6366f1',borderWidth:1.2,pointRadius:0,tension:.2,borderDash:[6,3]},
+    ]},options:{responsive:true,aspectRatio:4,interaction:{mode:'index',intersect:false},
       plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y?.toFixed(2)}`}}},
       scales:{x:{ticks:{maxTicksLimit:12}},y:{ticks:{callback:v=>'$'+v}}}}});
 
-  const sColors = d.signal_series.map(v=>v==null?'#ccc':scoreColor(v));
+  const sColors = signals.map(v=>v==null?'#ccc':scoreColor(v));
   mkChart('signalChart',{type:'line',data:{
-    labels:d.dates,
-    datasets:[{label:'Signal',data:d.signal_series,borderColor:'#6366f1',backgroundColor:sColors.map(c=>c+'44'),
+    labels:dates,
+    datasets:[{label:'Signal',data:signals,borderColor:'#6366f1',backgroundColor:sColors.map(c=>c+'44'),
                borderWidth:1.5,pointRadius:0,tension:.2,fill:true}]},
-    options:{responsive:true,plugins:{legend:{display:false},
-      annotation:{annotations:{b30:{type:'line',yMin:30,yMax:30,borderColor:'#198754',borderWidth:1,borderDash:[4,3]},
+    options:{responsive:true,aspectRatio:4,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed.y; return v<=30?`Signal: ${v.toFixed(1)} (Buy)`:v<=50?`Signal: ${v.toFixed(1)} (Neutral-Buy)`:v<=70?`Signal: ${v.toFixed(1)} (Neutral-Sell)`:`Signal: ${v.toFixed(1)} (Sell)`;}}},
+        annotation:{annotations:{b30:{type:'line',yMin:30,yMax:30,borderColor:'#198754',borderWidth:1,borderDash:[4,3]},
                                  b50:{type:'line',yMin:50,yMax:50,borderColor:'#ffc107',borderWidth:1,borderDash:[4,3]},
                                  b70:{type:'line',yMin:70,yMax:70,borderColor:'#dc3545',borderWidth:1,borderDash:[4,3]}}}},
       scales:{y:{min:0,max:100}}}});
@@ -1015,6 +1087,7 @@ function switchTicker(t, el){
     document.getElementById('cmpView').style.display='none';
     const d=ALL[t];
     renderStrip(d);
+    initRangeSlider();
     const activeTab=document.querySelector('#mainTabs button.active')?.dataset?.tab||'price';
     if(activeTab==='price') renderPriceTab(d);
     else if(activeTab==='buffett') renderBuffettTab(d);
@@ -1023,13 +1096,32 @@ function switchTicker(t, el){
   }
 }
 
+// ── dark mode ─────────────────────────────────────────────────
+function toggleTheme(){
+  const t = document.documentElement.getAttribute('data-theme')==='dark' ? '' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('theme', t);
+}
+(function loadTheme(){
+  const t = localStorage.getItem('theme');
+  if(t) document.documentElement.setAttribute('data-theme', t);
+})();
+
 // ── initial render ────────────────────────────────────────────
 (function init(){
   const d=ALL[activeTicker];
   renderStrip(d);
   renderPriceTab(d);
+  initRangeSlider();
 })();
 </script>
+
+<div class="footer">
+  <strong>InvestorGPT</strong> &mdash; AI-Powered Semiconductor Investment Advisor<br>
+  Built with OpenAI GPT-4o &middot; FAISS Vector Search &middot; ARIMA + Monte Carlo Forecasting<br>
+  <span style="font-size:.7rem">Capstone Project &middot; Data as of <span id="footerTs"></span> &middot; Not financial advice</span>
+</div>
+<script>document.getElementById('footerTs').textContent=ALL.generated||'N/A';</script>
 </body>
 </html>
 """
