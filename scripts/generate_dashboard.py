@@ -841,6 +841,7 @@ async function checkServer(){
     return false;
   }
 }
+let _serverPoll = null;
 async function initChat(){
   loadAiSettings();
   const online = await checkServer();
@@ -850,6 +851,12 @@ async function initChat(){
   else if(online) setChatMode('server');
   else if(key) setChatMode('direct');
   else setChatMode('rag');
+  if(!online && !_serverPoll){
+    _serverPoll = setInterval(async ()=>{
+      const ok = await checkServer();
+      if(ok){ clearInterval(_serverPoll); _serverPoll=null; setChatMode('server'); }
+    }, 5000);
+  }
 }
 function setChatMode(mode){
   chatMode = mode;

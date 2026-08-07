@@ -2,16 +2,32 @@
 
 ## RAG Server (AI Chat "Server AI" mode)
 
-### "Server offline" in AI Chat tab
-**Root cause:** `rag_server.py` is not running on port 8503.
-**Fix:** Start it manually:
+### "Server offline — start rag_server.py" in AI Chat tab
+
+**Symptoms:** AI Chat tab shows red "Server offline" even after running `open_dashboard.bat`.
+
+**Root cause (race condition):** The bat file starts `rag_server.py` in a background window and waits for port 8503. However:
+1. Original bat used `cmd /c` — if the server crashed, the window closed silently with no error visible.
+2. The server takes several seconds to load 754 FAISS vectors + initialize OpenAI client.
+3. The browser opens `index.html` and JS calls `/health` once. If the server isn't ready yet, it shows "offline" permanently (no retry).
+
+**Fixes applied (2026-08-07):**
+1. **`open_dashboard.bat`**: Changed `cmd /c` → `cmd /k` so the server window stays open (errors visible). Increased wait timeout 30s → 45s.
+2. **`webpage/index.html` + `scripts/generate_dashboard.py`**: Added `_serverPoll` — a `setInterval(5000)` retry that polls `/health` every 5s. Once server responds, it auto-switches to "Server online" mode and clears the interval.
+
+**Manual fix if server still offline:**
 ```powershell
-Set-Location "c:\Users\bhoe\VS Code\InvestorGPT"
-python scripts\rag_server.py
+cd "c:\Users\bhoe\VS Code\InvestorGPT"
+python scripts/rag_server.py
 ```
+Then refresh the browser — the 5s polling will pick it up automatically.
+
+**Key facts:**
 - Server runs on `http://localhost:8503`
 - Loads FAISS index (754 vectors) from `data/rag_index/`
 - Requires `OPENAI_API_KEY` in `.env` for GPT-4o synthesis
+- Health endpoint: `GET /health` → `{"status": "ok"}`
+- The `generate_dashboard.py` regenerates `index.html` — polling fix lives in BOTH files
 
 ### No .venv — use system Python
 - There is NO `.venv` in this workspace
