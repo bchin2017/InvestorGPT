@@ -155,11 +155,65 @@ In interactive mode, use inline filters: `/ticker:INTC`, `/source:macrotrends`
 
 ## Port Reference
 
-| Dashboard | Port |
+| Service | Port |
 |---|---|
-| **InvestorGPT** | **8502** |
-| intc-stock (desktop) | 8501 |
-| intc-stock (phone) | 8503 |
+| **Streamlit Dashboard** | **8502** |
+| **RAG AI Chat Server** | **8503** |
+
+---
+
+## AI Chat Server (RAG + Memory)
+
+The AI Chat tab in the static dashboard requires `rag_server.py` running on port 8503.
+
+### Start the server
+
+```powershell
+cd "c:\Users\bhoe\VS Code\InvestorGPT"
+python scripts/rag_server.py
+```
+
+The server:
+- Loads FAISS index (754 vectors) on startup
+- Exposes `/chat/general` endpoint with session memory
+- Maintains conversation history per browser session (up to 100 messages / 50 turns)
+- Remembers user introductions, preferences, and prior context across messages
+- Asks clarifying questions only for ambiguous financial queries (not conversational ones)
+- Detects conversational queries (greetings, name recall, "remember", "i am") and skips RAG
+- Filters out low-confidence RAG results (score < 0.2) to avoid noise
+- Auto-started by `open_dashboard.bat` (port 8503 check → `cmd /k`)
+- System prompt explicitly instructs GPT-4o to always check conversation history first
+
+### Session Memory
+
+Each browser gets a persistent user ID (stored in localStorage). Sessions are tracked per-user:
+- **Chat History panel** (right side) shows all your past sessions with topic previews
+- Click any session to switch back to it (server restores context)
+- Click **"+ New"** to start a fresh session
+- Click 🗑️ next to Send to clear current session memory
+- Sessions persist for **1 week** (auto-expire after 7 days)
+- Server keeps up to 100 messages (50 turns) per session
+- Last 50 messages sent to GPT-4o for context on each request
+
+**Clear memory**: Click the 🗑️ button next to Send in the chat, or call:
+```powershell
+curl -X POST http://localhost:8503/chat/clear -H "Content-Type: application/json" -d "{\"session_id\":\"your_session_id\"}"
+```
+
+**List sessions**:
+```powershell
+curl -X POST http://localhost:8503/chat/sessions -H "Content-Type: application/json" -d "{\"user_prefix\":\"u_\"}"
+```
+
+Memory resets when: user clicks clear button, session expires (7 days), or server restarts.
+
+### Health check
+
+```powershell
+curl http://localhost:8503/health
+```
+
+Expected: `{"status": "ok", "has_api_key": true}`
 
 ---
 
