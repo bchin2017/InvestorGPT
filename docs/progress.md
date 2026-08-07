@@ -189,6 +189,32 @@
 - [x] Footer timestamp matches dashboard generation date
 - [x] All changes in both `webpage/index.html` and `scripts/generate_dashboard.py`
 
+### Phase 6 — Streamlit Cloud Deployment (In Progress — 2026-08-07)
+
+**Objective:** Deploy `dashboard.py` to Streamlit Cloud with full RAG AI Chat.
+
+**Completed:**
+- [x] Added `💬 AI Chat (RAG)` tab to `dashboard.py` with embedded FAISS (no server needed)
+- [x] Uses `@st.cache_resource` to load FAISS index once
+- [x] `st.chat_input` + `st.session_state` for conversation memory
+- [x] Confidence filter (≥0.2) + cited answers from GPT-4o
+- [x] Pushed to GitHub (`bchin2017/InvestorGPT`)
+- [x] Commented out `firecrawl-py` in `requirements.txt` (build fails on cloud)
+
+**Blocking Issue — Streamlit Cloud not reflecting latest code:**
+- App still shows old version after reboot
+- Suspected cause: `firecrawl-py` or `lxml` build dependency fails during pip install on Streamlit Cloud (Linux), causing the entire deploy to fail silently
+- Streamlit Cloud only reads `requirements.txt` — no separate install file supported
+- Created `requirements_streamlit.txt` (minimal deps) but Streamlit Cloud ignores it
+
+**Next Steps:**
+- [ ] Check Streamlit Cloud logs for install errors
+- [ ] Verify "Main file path" in app settings is `dashboard.py` (not `app 1.py`)
+- [ ] If lxml still fails, comment it out (not needed by dashboard.py)
+- [ ] Add `OPENAI_API_KEY` to Streamlit Cloud Secrets
+- [ ] Verify FAISS index files are in the pushed repo (11MB)
+- [ ] Consider removing `scikit-learn`, `matplotlib`, `seaborn` from requirements if unused by dashboard.py
+
 ---
 
 ## Architecture — Current
