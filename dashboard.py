@@ -555,6 +555,7 @@ def main():
     if show_compare:
         tab_labels.append("⚖️ Compare")
     tab_labels.append("🤖 AI Advisor")
+    tab_labels.append("💬 AI Chat (RAG)")
     tabs = st.tabs(tab_labels)
 
     # ── Tab 1: Price & Signal ─────────────────────────────────
@@ -864,6 +865,122 @@ def main():
             st.markdown(resp)
             if not os.getenv("OPENAI_API_KEY"):
                 st.caption("💡 Add OPENAI_API_KEY to .env for GPT-4o responses")
+
+    # ── RAG Chat Tab ──────────────────────────────────────────
+    with tabs[-1]:
+        _render_rag_chat()
+
+
+@st.cache_resource
+def _load_faiss_index():
+    """Load FAISS index + chunk metadata once."""
+    import faiss, json
+    idx_path = os.path.join(ROOT_DIR, 'data', 'rag_index', 'faiss.index')
+    meta_path = os.path.join(ROOT_DIR, 'data', 'rag_index', 'chunks_meta.json')
+    if not os.path.exists(idx_path):
+        return None, []
+    index = faiss.read_index(idx_path)
+    with open(meta_path, 'r', encoding='utf-8') as f:
+        chunks = json.load(f)
+    return index, chunks
+
+
+def _embed_query(text: str):
+    """Embed a query using text-embedding-3-large."""
+    from openai import OpenAI
+    client = OpenAI()
+    resp = client.embeddings.create(model="text-embedding-3-large", input=[text])
+    vec = np.array([resp.data[0].embedding], dtype="float32")
+    import faiss
+    faiss.normalize_L2(vec)
+    return vec
+
+
+def _rag_retrieve(query: str, top_k: int = 6, ticker: str = None):
+    """Retrieve top-k chunks from FAISS index."""
+    index, chunks = _load_faiss_index()
+    if index is None:
+        return []
+    vec = _embed_query(query)
+    scores, indices = index.search(vec, min(top_k * 3, index.ntotal))
+    results = []
+    for score, idx in zip(scores[0], indices[0]):
+        if idx < 0:
+            continue
+        chunk = chunks[idx]
+        meta = chunk.get("metadata", {})
+        if ticker and meta.get("ticker", "").upper() != ticker.upper():
+            continue
+        results.append({"text": chunk["text"], "score": float(score), **meta})
+        if len(results) >= top_k:
+            break
+    return results
+
+
+def _render_rag_chat():
+    """Render the RAG-powered chat tab using Streamlit chat widgets."""
+    st.markdown("#### 💬 InvestorGPT — RAG Chat")
+    st.caption("Ask questions grounded in SEC filings, financial data & research documents")
+
+    if not os.getenv("OPENAI_API_KEY"):
+        st.warning("Set OPENAI_API_KEY in .env or Streamlit Secrets to enable AI Chat.")
+        return
+
+    index, chunks = _load_faiss_index()
+    if index is None:
+        st.error("FAISS index not found. Run: python scripts/build_index.py")
+        return
+
+    st.caption(f"📚 Knowledge base: {index.ntotal} chunks indexed")
+
+    if "rag_messages" not in st.session_state:
+        st.session_state.rag_messages = []
+
+    for msg in st.session_state.rag_messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask about Intel, Micron, semiconductors..."):
+        st.session_state.rag_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Searching knowledge base..."):
+                retrieved = _rag_retrieve(prompt, top_k=6)
+                context = ""
+                if retrieved and retrieved[0]["score"] >= 0.2:
+                    context = "\n\n---\n\n".join(
+                        f"[Source: {r.get('source','?')} | {r.get('company','?')} | "
+                        f"Year: {r.get('fiscal_year','?')} | Score: {r['score']:.2f}]\n{r['text']}"
+                        for r in retrieved
+                    )
+
+                sys_msg = (
+                    "You are InvestorGPT, an expert semiconductor investment analyst. "
+                    "Use the provided context to answer with citations. "
+                    "If context is insufficient, say so. Be concise and precise with numbers."
+                )
+                messages = [{"role": "system", "content": sys_msg}]
+                if context:
+                    messages.append({"role": "system", "content": f"Context:\n{context}"})
+                for m in st.session_state.rag_messages[-10:]:
+                    messages.append({"role": m["role"], "content": m["content"]})
+
+                from openai import OpenAI
+                client = OpenAI()
+                resp = client.chat.completions.create(
+                    model="gpt-4o", messages=messages,
+                    temperature=0.3, max_tokens=2000,
+                )
+                answer = resp.choices[0].message.content or ""
+
+            st.markdown(answer)
+            if retrieved and retrieved[0]["score"] >= 0.2:
+                sources = set(f"{r.get('source','?')} ({r.get('company','?')})" for r in retrieved[:3])
+                st.caption(f"📄 Sources: {' | '.join(sources)}")
+
+        st.session_state.rag_messages.append({"role": "assistant", "content": answer})
 
 
 if __name__ == "__main__":
