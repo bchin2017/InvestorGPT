@@ -350,8 +350,9 @@ body{background:var(--bg);font-family:'Segoe UI',sans-serif;color:var(--text);tr
 
 <!-- header -->
 <div class="d-flex align-items-center mb-3 gap-3">
+  <img src="logo.png" alt="InvestorGPT" style="height:80px;width:auto">
   <div>
-    <h4 class="mb-0 fw-bold">&#129302; InvestorGPT</h4>
+    <h3 class="mb-0 fw-bold">InvestorGPT</h3>
     <small class="text-muted">AI-Powered Semiconductor Investment Advisor (INTC &amp; MU) &middot; Generated: <span id="genTs"></span></small>
   </div>
   <div class="ms-auto d-flex align-items-center gap-2">
