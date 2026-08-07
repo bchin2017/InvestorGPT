@@ -24,8 +24,8 @@ faiss-cpu>=1.7.4
 # Utilities
 python-dotenv>=1.0.0
 
-# Web scraping
-firecrawl-py
+# Web scraping (optional — only needed for scripts/crawl_sources.py)
+# firecrawl-py
 beautifulsoup4
 lxml
 
