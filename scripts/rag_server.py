@@ -34,14 +34,24 @@ STOCK_DIR = ROOT_DIR / "data" / "stock_history"
 bot: RAGChatbot | None = None
 client: OpenAI | None = None
 _stock_cache: dict[str, pd.DataFrame] = {}
+_chat_sessions: dict[str, dict] = {}  # session_id → {"messages": [...], "created": timestamp}
+SESSION_TTL_SECONDS = 7 * 24 * 3600  # 1 week
+SESSION_MAX_MESSAGES = 100  # keep last 100 messages (50 turns)
 
 SYSTEM_MSG = (
-    "You are SemiconInvest AI, an expert semiconductor investment analyst "
+    "You are InvestorGPT, an expert semiconductor investment analyst "
     "and general knowledge assistant. You specialize in Intel (INTC) and "
     "Micron (MU) but can answer ANY question the user asks. When financial "
     "context is provided, use it for data-backed answers with citations. "
     "When no relevant context is available, answer from your general knowledge. "
-    "Be concise, accurate, and helpful."
+    "Be concise, accurate, and helpful.\n\n"
+    "CONVERSATION MEMORY: You have access to the full conversation history below. "
+    "ALWAYS check previous messages first. If the user told you their name, "
+    "preferences, or any facts earlier in the conversation, remember and use them. "
+    "Never say 'I don't know your name' if they already introduced themselves.\n\n"
+    "CLARIFICATION: Only ask clarifying questions for genuinely ambiguous FINANCIAL "
+    "queries (e.g. 'revenue' without specifying company/year). Do NOT ask for "
+    "clarification on conversational messages, greetings, or personal questions. "
 )
 
 
@@ -315,6 +325,44 @@ def chat():
     })
 
 
+@app.route("/chat/clear", methods=["POST"])
+def chat_clear():
+    """Clear session memory for a given session_id."""
+    body = request.get_json(force=True)
+    session_id = body.get("session_id", "default")
+    if session_id in _chat_sessions:
+        del _chat_sessions[session_id]
+    return jsonify({"status": "cleared", "session_id": session_id})
+
+
+@app.route("/chat/sessions", methods=["POST"])
+def chat_sessions():
+    """List all sessions for a given user_id prefix, with topic summaries."""
+    import time as _time
+    body = request.get_json(force=True)
+    user_prefix = body.get("user_prefix", "")
+    now = _time.time()
+    sessions = []
+    for sid, data in list(_chat_sessions.items()):
+        if user_prefix and not sid.startswith(user_prefix):
+            continue
+        if (now - data["created"]) > SESSION_TTL_SECONDS:
+            del _chat_sessions[sid]
+            continue
+        msgs = data["messages"]
+        first_q = next((m["content"] for m in msgs if m["role"] == "user"), "New chat")
+        topic = first_q[:50] + ("..." if len(first_q) > 50 else "")
+        sessions.append({
+            "session_id": sid,
+            "topic": topic,
+            "messages": len(msgs),
+            "created": data["created"],
+            "age_hours": round((now - data["created"]) / 3600, 1),
+        })
+    sessions.sort(key=lambda s: s["created"], reverse=True)
+    return jsonify({"sessions": sessions})
+
+
 @app.route("/health", methods=["GET"])
 def health():
     has_key = bool(os.environ.get("OPENAI_API_KEY"))
@@ -460,11 +508,30 @@ def chat_general():
     model = body.get("model", "gpt-4o")
     temperature = float(body.get("temperature", 0.7))
     max_tokens = int(body.get("max_tokens", 2048))
+    session_id = body.get("session_id", "default")
+
+    # Initialize or retrieve session history (1-week TTL)
+    import time as _time
+    now = _time.time()
+    if session_id not in _chat_sessions or (now - _chat_sessions[session_id]["created"]) > SESSION_TTL_SECONDS:
+        _chat_sessions[session_id] = {"messages": [], "created": now}
+    session = _chat_sessions[session_id]
+    history = session["messages"]
+
+    # ── Detect conversational queries (skip RAG for chat/memory questions) ──
+    _CONVERSATIONAL_PATTERNS = (
+        "my name", "who am i", "i am ", "i'm ", "call me",
+        "remember", "you said", "earlier", "you mentioned",
+        "hello", "hi ", "hey ", "thanks", "thank you", "goodbye", "bye",
+        "how are you", "what did i", "what was my", "do you know me",
+        "nice to meet", "good morning", "good afternoon",
+    )
+    is_conversational = any(p in question.lower() for p in _CONVERSATIONAL_PATTERNS)
 
     # ── Intelligent query routing ─────────────────────────────
-    query_type = classify_query(question)
-    q_tickers = [ticker.upper()] if ticker else detect_tickers_in_query(question)
-    q_years = detect_year_in_query(question)
+    query_type = "conversational" if is_conversational else classify_query(question)
+    q_tickers = [] if is_conversational else ([ticker.upper()] if ticker else detect_tickers_in_query(question))
+    q_years = [] if is_conversational else detect_year_in_query(question)
 
     rag_context = ""
     citations = []
@@ -496,19 +563,19 @@ def chat_general():
             )
             if chunks:
                 top_score = chunks[0].get("score", 0)
-                rag_context += "\n\n[Financial Documents — FAISS RAG]\n" + b.format_context(chunks)
-                cite_str = build_citations(chunks, tickers=q_tickers or None)
-                if cite_str:
-                    citations += cite_str.split(" | ")
-                if top_score < 0.3:
-                    rag_context += "\n\n[Note: Low retrieval confidence — answer may rely on general knowledge]"
+                if top_score >= 0.2:
+                    rag_context += "\n\n[Financial Documents — FAISS RAG]\n" + b.format_context(chunks)
+                    cite_str = build_citations(chunks, tickers=q_tickers or None)
+                    if cite_str:
+                        citations += cite_str.split(" | ")
+                    if top_score < 0.4:
+                        rag_context += "\n\n[Note: Low retrieval confidence — answer may rely on general knowledge]"
         except Exception:
             pass
 
-    messages = [
-        {"role": "system", "content": SYSTEM_MSG + rag_context},
-        {"role": "user", "content": question},
-    ]
+    messages = [{"role": "system", "content": SYSTEM_MSG + rag_context}]
+    messages += history[-50:]  # include last 50 messages for context
+    messages.append({"role": "user", "content": question})
 
     try:
         c = get_client()
@@ -519,6 +586,12 @@ def chat_general():
         answer = resp.choices[0].message.content or ""
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+    # Save to session memory
+    history.append({"role": "user", "content": question})
+    history.append({"role": "assistant", "content": answer})
+    if len(history) > SESSION_MAX_MESSAGES:
+        history[:] = history[-SESSION_MAX_MESSAGES:]
 
     return jsonify({
         "answer": answer,

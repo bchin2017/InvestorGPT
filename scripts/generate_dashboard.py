@@ -481,6 +481,7 @@ body{background:var(--bg);font-family:'Segoe UI',sans-serif;color:var(--text);tr
           <div class="input-group">
             <input id="chatInput" type="text" class="form-control" placeholder="Ask about INTC or MU..." onkeydown="if(event.key==='Enter')sendChat()">
             <button class="btn btn-primary" onclick="sendChat()" id="chatSendBtn">Send</button>
+            <button class="btn btn-outline-danger" onclick="clearChatSession()" title="Clear conversation memory">&#128465;</button>
           </div>
           <div class="mt-2">
             <span class="caveat">Suggested: </span>
@@ -491,7 +492,15 @@ body{background:var(--bg);font-family:'Segoe UI',sans-serif;color:var(--text);tr
         </div>
       </div>
       <div class="col-lg-4">
-        <div class="card p-3 h-100">
+        <div class="card p-3 mb-3" style="max-height:280px;overflow-y:auto">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-semibold mb-0">&#128214; Chat History</h6>
+            <button class="btn btn-outline-secondary btn-sm" onclick="newChatSession()">+ New</button>
+          </div>
+          <div id="sessionList" class="list-group list-group-flush" style="font-size:.82rem"></div>
+          <div class="caveat mt-2">Sessions persist for 1 week</div>
+        </div>
+        <div class="card p-3">
           <h6 class="fw-semibold mb-3">&#9881; AI Settings</h6>
           <div id="directApiPanel" style="display:none">
             <label class="form-label small fw-semibold">Provider</label>
@@ -866,6 +875,9 @@ const RAG_SERVER = 'http://localhost:8503';
 let chatMode = 'server';
 let serverOnline = false;
 let _validateTimer = null;
+const _userPrefix = 'u_'+(localStorage.getItem('chat_user_id')||( ()=>{const id=Math.random().toString(36).slice(2,10); localStorage.setItem('chat_user_id',id); return id;})());
+let _sessionId = localStorage.getItem('chat_active_session') || newSessionId();
+function newSessionId(){ const id=_userPrefix+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6); localStorage.setItem('chat_active_session',id); return id; }
 
 const OPENAI_MODELS  = ['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'];
 const GEMINI_MODELS  = ['gemini-2.0-flash','gemini-1.5-flash','gemini-1.5-pro'];
@@ -929,6 +941,7 @@ async function initChat(){
       if(ok){ clearInterval(_serverPoll); _serverPoll=null; setChatMode('server'); }
     }, 5000);
   }
+  loadSessionList();
 }
 function setChatMode(mode){
   chatMode = mode;
@@ -941,6 +954,41 @@ function setChatMode(mode){
   document.getElementById('ragModeInfo').style.display     = mode==='rag'    ? '' : 'none';
 }
 function setQ(q){ document.getElementById('chatInput').value=q; document.getElementById('chatInput').focus(); }
+async function clearChatSession(){
+  document.getElementById('chatHistory').innerHTML='';
+  try{ await fetch(RAG_SERVER+'/chat/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:_sessionId})}); }catch(e){}
+  appendMsg('bot','Memory cleared. Starting fresh conversation.');
+  loadSessionList();
+}
+function newChatSession(){
+  _sessionId = newSessionId();
+  document.getElementById('chatHistory').innerHTML='';
+  appendMsg('bot','New session started. How can I help?');
+  loadSessionList();
+}
+async function loadSessionList(){
+  const el = document.getElementById('sessionList');
+  if(!el) return;
+  try{
+    const r = await fetch(RAG_SERVER+'/chat/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_prefix:_userPrefix})});
+    const j = await r.json();
+    if(!j.sessions||!j.sessions.length){ el.innerHTML='<div class="text-muted small">No sessions yet</div>'; return; }
+    el.innerHTML = j.sessions.map(s=>{
+      const active = s.session_id===_sessionId ? 'active fw-bold' : '';
+      const age = s.age_hours<24 ? Math.round(s.age_hours)+'h ago' : Math.round(s.age_hours/24)+'d ago';
+      return `<a href="#" class="list-group-item list-group-item-action py-1 px-2 ${active}" onclick="switchSession('${s.session_id}');return false;">
+        <div class="d-flex justify-content-between"><span class="text-truncate" style="max-width:160px">${s.topic}</span><small class="text-muted">${age}</small></div>
+        <small class="text-muted">${s.messages} msgs</small></a>`;
+    }).join('');
+  }catch(e){ el.innerHTML='<div class="text-muted small">Server offline</div>'; }
+}
+function switchSession(sid){
+  _sessionId = sid;
+  localStorage.setItem('chat_active_session', sid);
+  document.getElementById('chatHistory').innerHTML='';
+  appendMsg('bot','Switched to session. Your conversation context is restored on the server.');
+  loadSessionList();
+}
 function appendMsg(role, html){
   const h = document.getElementById('chatHistory');
   const div = document.createElement('div');
@@ -981,11 +1029,12 @@ async function sendChat(){
     appendMsg('bot', '&#10060; Error: '+e.message);
   }
   btn.disabled=false; btn.textContent='Send';
+  loadSessionList();
 }
 async function callServer(q){
   const r = await fetch(RAG_SERVER+'/chat/general',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({question:q, temperature:parseFloat(document.getElementById('aiTemp').value),
+    body:JSON.stringify({question:q, session_id:_sessionId, temperature:parseFloat(document.getElementById('aiTemp').value),
       max_tokens:parseInt(document.getElementById('aiMaxTokens').value)})
   });
   const j = await r.json();
