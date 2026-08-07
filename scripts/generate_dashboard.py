@@ -322,7 +322,7 @@ HTML_TEMPLATE = """\
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>SemiconInvest AI \u2013 InvestorGPT</title>
+<title>InvestorGPT</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -346,8 +346,8 @@ body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
 <!-- header -->
 <div class="d-flex align-items-center mb-3 gap-3">
   <div>
-    <h4 class="mb-0 fw-bold">&#129302; SemiconInvest AI</h4>
-    <small class="text-muted">InvestorGPT \u2013 Static Dashboard &middot; Generated: <span id="genTs"></span></small>
+    <h4 class="mb-0 fw-bold">&#129302; InvestorGPT</h4>
+    <small class="text-muted">AI-Powered Semiconductor Investment Advisor (INTC &amp; MU) &middot; Generated: <span id="genTs"></span></small>
   </div>
   <div class="ms-auto btn-group" role="group">
     <button class="btn btn-outline-primary ticker-btn active" onclick="switchTicker('INTC',this)">INTC</button>
@@ -446,7 +446,7 @@ body{background:#f0f2f5;font-family:'Segoe UI',sans-serif}
       <div class="col-lg-8">
         <div class="card p-3 h-100 d-flex flex-column" style="min-height:520px">
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="fw-semibold mb-0">&#129302; SemiconInvest AI</h6>
+            <h6 class="fw-semibold mb-0">&#129302; InvestorGPT</h6>
             <div class="btn-group btn-group-sm" id="chatModeGroup">
               <button class="btn btn-outline-secondary" id="modeServer" onclick="setChatMode('server')">Server AI</button>
               <button class="btn btn-outline-secondary" id="modeDirect" onclick="setChatMode('direct')">Direct API</button>
@@ -954,7 +954,7 @@ async function callDirectApi(q){
     const r = await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
       body:JSON.stringify({model,temperature:temp,max_tokens:maxTok,top_p:topP,
-        messages:[{role:'system',content:'You are SemiconInvest AI, an expert semiconductor investment analyst specializing in Intel (INTC) and Micron (MU).'},
+        messages:[{role:'system',content:'You are InvestorGPT, an expert semiconductor investment analyst specializing in Intel (INTC) and Micron (MU).'},
                   {role:'user',content:q}]})});
     const j = await r.json();
     document.getElementById('chatThinking')?.remove();
