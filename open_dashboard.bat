@@ -40,7 +40,7 @@ echo %STEP_SERVER% Checking RAG server on port 8503...
 call :write_status "Starting AI server" "Checking backend on port 8503..." "0"
 call :is_port_listening 8503
 if errorlevel 1 (
-	start "" /min cmd /k "\"%PY_CMD%\" scripts\rag_server.py"
+	powershell -ExecutionPolicy Bypass -File "scripts\start_server_bg.ps1"
 	call :wait_for_port 8503 45
 	if errorlevel 1 (
 		call :write_status "AI server warning" "Backend startup is slow. Dashboard will still open." "0"

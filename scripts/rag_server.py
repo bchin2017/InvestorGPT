@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -38,7 +39,7 @@ _chat_sessions: dict[str, dict] = {}  # session_id → {"messages": [...], "crea
 SESSION_TTL_SECONDS = 7 * 24 * 3600  # 1 week
 SESSION_MAX_MESSAGES = 100  # keep last 100 messages (50 turns)
 
-SYSTEM_MSG = (
+_SYSTEM_MSG_BASE = (
     "You are InvestorGPT, an expert semiconductor investment analyst "
     "and general knowledge assistant. You specialize in Intel (INTC) and "
     "Micron (MU) but can answer ANY question the user asks. When financial "
@@ -53,6 +54,30 @@ SYSTEM_MSG = (
     "queries (e.g. 'revenue' without specifying company/year). Do NOT ask for "
     "clarification on conversational messages, greetings, or personal questions. "
 )
+
+
+def build_system_msg() -> str:
+    """Build system prompt injected with today's date and latest CSV data date."""
+    today = datetime.now().strftime("%A, %B %d, %Y")
+    csv_dates = []
+    for ticker in ("INTC", "MU"):
+        df = load_stock(ticker)
+        if df is not None and not df.empty:
+            csv_dates.append(df["Date"].max())
+    if csv_dates:
+        latest_csv = max(csv_dates).strftime("%Y-%m-%d (%A)")
+        csv_note = (
+            f"The local stock price CSV is current through {latest_csv}. "
+            "Markets are closed on weekends — if today is Monday, the latest data is from Friday. "
+            "When asked about 'today\'s price' or 'current price', use the latest available CSV row "
+            "and always state the exact data date in your answer. Never fabricate or estimate prices."
+        )
+    else:
+        csv_note = "Stock CSV data is not currently loaded."
+    return (
+        _SYSTEM_MSG_BASE +
+        f"\n\nDATE AWARENESS: Today is {today}. {csv_note}"
+    )
 
 
 def get_bot() -> RAGChatbot:
@@ -73,7 +98,7 @@ def get_client() -> OpenAI:
 _TICKER_COMPANY = {"INTC": "Intel", "MU": "Micron"}
 
 
-def build_citations(chunks: list, tickers: list[str] | None = None, max_cites: int = 1) -> str:
+def build_citations(chunks: list, tickers: list[str] | None = None, max_cites: int = 2) -> str:
     """Return a clean, deduplicated citation string from FAISS chunks."""
     allowed: set[str] | None = None
     if tickers:
@@ -90,7 +115,7 @@ def build_citations(chunks: list, tickers: list[str] | None = None, max_cites: i
             continue
         seen.add(key)
         score = c.get("score", 0)
-        parts.append(f"{c.get('source', '')} — {company} ({c.get('section', '')}) [conf: {score:.2f}]")
+        parts.append(f"{c.get('source', '')}/{c.get('section', '')} — {company} [{score:.2f}]")
         if len(parts) >= max_cites:
             break
     return " | ".join(parts)
@@ -114,6 +139,47 @@ def load_stock(ticker: str) -> pd.DataFrame | None:
 def lookup_stock_price(question: str) -> str | None:
     """If the question asks about a stock price on a date, return the data."""
     # Detect date patterns in the question
+    q_lower = question.lower()
+
+    # "today" / "current" / "latest" → use the most recent trading day in the CSV
+    _LATEST_KW = ("today", "right now", "current price", "latest price", "at the moment", "this moment")
+    if any(kw in q_lower for kw in _LATEST_KW) and any(w in q_lower for w in ("price", "stock", "share", "intc", "intel", "mu", "micron")):
+        tickers = []
+        if "intc" in q_lower or "intel" in q_lower:
+            tickers.append("INTC")
+        if re.search(r"\bmu\b", q_lower) or "micron" in q_lower:
+            tickers.append("MU")
+        if not tickers:
+            tickers = ["INTC", "MU"]
+        today_date = datetime.now().date()
+        results = []
+        for ticker in tickers:
+            df = load_stock(ticker)
+            if df is None or df.empty:
+                continue
+            row = df.iloc[-1]
+            close = row.get("Close") or row.get("Adj Close")
+            open_ = row.get("Open")
+            high = row.get("High")
+            low = row.get("Low")
+            vol = row.get("Volume")
+            csv_date = row["Date"].date()
+            actual_date = row["Date"].strftime("%Y-%m-%d (%A)")
+            gap_note = ""
+            if csv_date < today_date:
+                days_gap = (today_date - csv_date).days
+                gap_note = f" [NOTE: today is {today_date.strftime('%Y-%m-%d (%A)')} — data is {days_gap} day(s) old; market may have been closed]"
+            info = (
+                f"{ticker} — latest available: {actual_date}: "
+                f"Open=${float(open_):.2f}, High=${float(high):.2f}, "
+                f"Low=${float(low):.2f}, Close=${float(close):.2f}"
+            )
+            if vol and not pd.isna(vol):
+                info += f", Volume={int(vol):,}"
+            info += gap_note
+            results.append(info)
+        return "\n".join(results) if results else None
+
     date_patterns = [
         r"(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{4})",
         r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{1,2}),?\s+(\d{4})",
@@ -211,11 +277,12 @@ def classify_query(question: str) -> str:
         r"|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}",
         q, re.IGNORECASE,
     ))
+    has_today = any(kw in q for kw in ("today", "right now", "current price", "latest price", "at the moment"))
     csv_score = sum(1 for kw in _CSV_PRICE_KW if kw in q)
     ana_score = sum(1 for kw in _ANALYTICS_KW if kw in q)
     fai_score = sum(1 for kw in _FAISS_KW if kw in q)
 
-    if has_date and ("price" in q or "stock" in q or csv_score > 0):
+    if (has_date or has_today) and ("price" in q or "stock" in q or csv_score > 0):
         return "csv_price"
     if ana_score > 0:
         return "csv_analytics"
@@ -565,7 +632,7 @@ def chat_general():
                 top_score = chunks[0].get("score", 0)
                 if top_score >= 0.2:
                     rag_context += "\n\n[Financial Documents — FAISS RAG]\n" + b.format_context(chunks)
-                    cite_str = build_citations(chunks, tickers=q_tickers or None)
+                    cite_str = build_citations(chunks, tickers=q_tickers or None, max_cites=2)
                     if cite_str:
                         citations += cite_str.split(" | ")
                     if top_score < 0.4:
@@ -573,7 +640,7 @@ def chat_general():
         except Exception:
             pass
 
-    messages = [{"role": "system", "content": SYSTEM_MSG + rag_context}]
+    messages = [{"role": "system", "content": build_system_msg() + rag_context}]
     messages += history[-50:]  # include last 50 messages for context
     messages.append({"role": "user", "content": question})
 

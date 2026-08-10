@@ -1,6 +1,6 @@
 # InvestorGPT — How to Run
 
-**Last updated:** 2026-08-06
+**Last updated:** 2026-08-10
 
 ---
 
@@ -15,6 +15,8 @@
 | `scripts/build_index.py` | Chunk documents, embed, build FAISS vector index |
 | `scripts/rag_chatbot.py` | RAG chatbot with citation-backed answers |
 | `scripts/generate_dashboard.py` | Regenerate static `webpage/index.html` from 10-K data |
+| `scripts/start_server_bg.ps1` | Start `rag_server.py` as a hidden detached background process |
+| `install_autostart.bat` | **Run once as Admin** — installs Windows Scheduled Task to auto-start RAG server at login |
 | `start_investor.bat` | One-click launcher (port 8502) |
 | `_keeper.bat` | Watchdog — auto-restarts Streamlit on crash |
 | `stop_investor.bat` | One-click stop |
@@ -166,11 +168,51 @@ In interactive mode, use inline filters: `/ticker:INTC`, `/source:macrotrends`
 
 The AI Chat tab in the static dashboard requires `rag_server.py` running on port 8503.
 
-### Start the server
+### Why you see "Server offline" every day
 
+The server is a process — it dies when you reboot or close the terminal that launched it. The bat file only starts it if port 8503 is not already listening, so a fresh boot always needs it restarted.
+
+**Permanent fix (one-time setup):**  
+Right-click `install_autostart.bat` → **Run as Administrator**  
+This registers a Windows Scheduled Task that auto-starts the server on every login. Do this once and the issue is gone permanently.
+
+### Architecture (as of 2026-08-10)
+
+`open_dashboard.bat` now calls `scripts/start_server_bg.ps1` instead of a visible `cmd /k` window:
+- Server runs as a **hidden, detached process** (no window to accidentally close)
+- Stdout logged to `data/rag_server.log`, stderr to `data/rag_server_err.log`
+- PID saved to `data/rag_server.pid`
+- `open_dashboard.bat` polls port 8503 for up to 45 seconds before proceeding
+
+### Normal start (via bat)
+
+Just run `open_dashboard.bat` or `open_dashboard_fast.bat` — the server starts automatically if not already running.
+
+### Manual start options
+
+**Option A — Preferred (hidden background process, survives terminal close):**
+```powershell
+cd "c:\Users\bhoe\VS Code\InvestorGPT"
+powershell -ExecutionPolicy Bypass -File "scripts\start_server_bg.ps1"
+```
+
+**Option B — Visible window (useful for live debugging):**
 ```powershell
 cd "c:\Users\bhoe\VS Code\InvestorGPT"
 python scripts/rag_server.py
+```
+> Keep this window open — closing it kills the server.
+
+**Option C — Kill and restart:**
+```powershell
+Get-Content "c:\Users\bhoe\VS Code\InvestorGPT\data\rag_server.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+cd "c:\Users\bhoe\VS Code\InvestorGPT"
+powershell -ExecutionPolicy Bypass -File "scripts\start_server_bg.ps1"
+```
+
+**Option D — Check crash logs:**
+```powershell
+Get-Content "c:\Users\bhoe\VS Code\InvestorGPT\data\rag_server_err.log"
 ```
 
 The server:
@@ -181,7 +223,6 @@ The server:
 - Asks clarifying questions only for ambiguous financial queries (not conversational ones)
 - Detects conversational queries (greetings, name recall, "remember", "i am") and skips RAG
 - Filters out low-confidence RAG results (score < 0.2) to avoid noise
-- Auto-started by `open_dashboard.bat` (port 8503 check → `cmd /k`)
 - System prompt explicitly instructs GPT-4o to always check conversation history first
 
 ### Session Memory
