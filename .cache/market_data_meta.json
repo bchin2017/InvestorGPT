@@ -2,8 +2,8 @@
   "INTC": {
     "ticker": "INTC",
     "source_api": "https://query1.finance.yahoo.com/v8/finance/chart/INTC",
-    "fetched_on": "2026-09-07",
-    "fetched_at_utc": "2026-09-07T08:12:51.347794+00:00",
+    "fetched_on": "2026-09-08",
+    "fetched_at_utc": "2026-09-08T08:00:58.815158+00:00",
     "rows": 11713,
     "start_date": "1980-03-17",
     "end_date": "2026-09-04",
@@ -13,8 +13,8 @@
   "MU": {
     "ticker": "MU",
     "source_api": "https://query1.finance.yahoo.com/v8/finance/chart/MU",
-    "fetched_on": "2026-09-07",
-    "fetched_at_utc": "2026-09-07T08:12:51.972026+00:00",
+    "fetched_on": "2026-09-08",
+    "fetched_at_utc": "2026-09-08T08:00:59.439309+00:00",
     "rows": 10648,
     "start_date": "1984-06-01",
     "end_date": "2026-09-04",
