@@ -2,23 +2,23 @@
   "INTC": {
     "ticker": "INTC",
     "source_api": "https://query1.finance.yahoo.com/v8/finance/chart/INTC",
-    "fetched_on": "2026-09-11",
-    "fetched_at_utc": "2026-09-11T07:59:28.585972+00:00",
-    "rows": 11716,
+    "fetched_on": "2026-09-14",
+    "fetched_at_utc": "2026-09-14T08:49:41.063110+00:00",
+    "rows": 11717,
     "start_date": "1980-03-17",
-    "end_date": "2026-09-10",
-    "last_close": 100.31999969482422,
+    "end_date": "2026-09-11",
+    "last_close": 102.94000244140625,
     "csv_path": "/home/runner/work/InvestorGPT/InvestorGPT/data/stock_history/intc_history.csv"
   },
   "MU": {
     "ticker": "MU",
     "source_api": "https://query1.finance.yahoo.com/v8/finance/chart/MU",
-    "fetched_on": "2026-09-11",
-    "fetched_at_utc": "2026-09-11T07:59:28.909885+00:00",
-    "rows": 10651,
+    "fetched_on": "2026-09-14",
+    "fetched_at_utc": "2026-09-14T08:49:41.405951+00:00",
+    "rows": 10652,
     "start_date": "1984-06-01",
-    "end_date": "2026-09-10",
-    "last_close": 977.4099731445312,
+    "end_date": "2026-09-11",
+    "last_close": 975.260009765625,
     "csv_path": "/home/runner/work/InvestorGPT/InvestorGPT/data/stock_history/mu_history.csv"
   }
 }
